@@ -1,0 +1,146 @@
+import 'dart:ui' as ui;
+
+import 'package:antiyoy_self/src/game/map_generator.dart';
+import 'package:antiyoy_self/src/game/models.dart';
+import 'package:antiyoy_self/src/modding/game_mod.dart';
+import 'package:antiyoy_self/src/ui/classic_assets.dart';
+import 'package:antiyoy_self/src/ui/hex_board.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('pre-tinted team masks preserve direct color-filter pixels', () async {
+    const color = Color(0xff5baa77);
+    final sprites = await ClassicSprites.load(teamColors: [color]);
+    final mask = sprites['castle_team'];
+    final tinted = sprites.tintedSprite(mask, color);
+    expect(tinted, isNotNull);
+    expect(tinted!.$2.width, mask.width);
+    Future<List<int>> pixels(bool prepared) async {
+      final recorder = ui.PictureRecorder();
+      final rect = Rect.fromLTWH(
+        0,
+        0,
+        mask.width.toDouble(),
+        mask.height.toDouble(),
+      );
+      Canvas(recorder).drawImageRect(
+        prepared ? tinted.$1 : mask,
+        prepared ? tinted.$2 : rect,
+        rect,
+        Paint()
+          ..colorFilter = prepared
+              ? null
+              : const ColorFilter.mode(color, BlendMode.srcIn),
+      );
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(mask.width, mask.height);
+      final result = (await image.toByteData())!.buffer.asUint8List().toList();
+      image.dispose();
+      picture.dispose();
+      return result;
+    }
+
+    expect(await pixels(true), await pixels(false));
+    sprites.dispose();
+  });
+
+  test(
+    'terrain display list reuses unchanged frames and invalidates safely',
+    () {
+      final cache = HexTerrainCache();
+      var records = 0;
+      void record(Canvas canvas) {
+        records++;
+        canvas.drawCircle(Offset.zero, 10, Paint());
+      }
+
+      for (final signature in [1, 1, 1, 2, 2]) {
+        final recorder = ui.PictureRecorder();
+        cache.draw(Canvas(recorder), signature, record);
+        recorder.endRecording().dispose();
+      }
+      expect(records, 2);
+      expect(cache.builds, 2);
+      cache.dispose();
+    },
+  );
+
+  test(
+    'split cached and animated piece passes preserve pixels and cull offscreen',
+    () async {
+      final mod = await GameMod.loadDefault();
+      final state = MapGenerator(mod).generate(
+        const GameConfig(
+          mapSize: MapSize.small,
+          playerCount: 3,
+          humanCount: 3,
+          diplomacy: true,
+          seed: 82,
+        ),
+      );
+      for (final province in state.provinces) {
+        final tile = state
+            .hexes[province.tiles.firstWhere((i) => i != province.capital)];
+        tile
+          ..object = TileObject.none
+          ..unit = GameUnit(strength: 1, owner: province.owner);
+      }
+      final visible = state.hexes.map((tile) => tile.index).toSet();
+      final water = state.waterCells.map((cell) => cell.index).toSet();
+      final frame = HexPieceFrame(state, visible, water);
+      expect(frame.units.length, lessThan(state.hexes.length));
+      expect(
+        frame.movingUnits.every((tile) => tile.unit!.owner == state.turn),
+        isTrue,
+      );
+      final sprites = await ClassicSprites.load();
+      final size = HexBoard.canvasSize(state);
+      HexUnitPainter painter(HexPiecePass pass, {Rect? view}) => HexUnitPainter(
+        state: state,
+        mod: mod,
+        sprites: sprites,
+        jumpProgress: .4,
+        alertOwner: 0,
+        selectedProvinceId: null,
+        visibleTiles: visible,
+        visibleWaterCells: water,
+        frame: frame,
+        pass: pass,
+        viewBounds: view,
+      );
+      Future<List<int>> pixels(List<HexUnitPainter> painters) async {
+        final recorder = ui.PictureRecorder();
+        final canvas = Canvas(recorder);
+        for (final painter in painters) {
+          painter.paint(canvas, size);
+        }
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(
+          size.width.ceil(),
+          size.height.ceil(),
+        );
+        final data = (await image.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        ))!.buffer.asUint8List().toList();
+        image.dispose();
+        picture.dispose();
+        return data;
+      }
+
+      final ordinary = await pixels([painter(HexPiecePass.all)]);
+      final split = await pixels([
+        painter(HexPiecePass.still),
+        painter(HexPiecePass.animated),
+      ]);
+      expect(split, ordinary);
+      final hidden = await pixels([
+        painter(HexPiecePass.all, view: const Rect.fromLTWH(-200, -200, 1, 1)),
+      ]);
+      expect(hidden.every((value) => value == 0), isTrue);
+      sprites.dispose();
+    },
+  );
+}

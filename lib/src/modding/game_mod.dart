@@ -1,0 +1,354 @@
+import 'dart:convert';
+
+import 'package:flutter/services.dart';
+
+class GameRules {
+  const GameRules({
+    required this.unitMoveLimit,
+    required this.unitPricePerLevel,
+    required this.farmBasePrice,
+    required this.farmPriceGrowth,
+    required this.towerPrice,
+    required this.strongTowerPrice,
+    required this.farmIncome,
+    required this.treeCutReward,
+    required this.unitUpkeep,
+    required this.towerUpkeep,
+    required this.strongTowerUpkeep,
+    required this.port1Price,
+    required this.port2Price,
+    required this.boat1Price,
+    required this.boat2Price,
+    required this.port1Upkeep,
+    required this.port2Upkeep,
+    required this.boat1Upkeep,
+    required this.boat2Upkeep,
+    required this.boatMoveLimit,
+    required this.portLaunchRadius,
+    required this.boat1Capacity,
+    required this.boat2Capacity,
+    required this.seaFortPrice,
+    required this.seaFortUpkeep,
+    required this.navalSupplyUpkeep,
+    required this.artilleryCosts,
+    required this.artilleryUpkeep,
+    required this.artilleryAmmoCapacity,
+    required this.artilleryShotCost,
+    required this.initialMoney,
+    required this.pineSpreadChance,
+    required this.palmSpreadChance,
+  });
+
+  final int unitMoveLimit;
+  final int unitPricePerLevel;
+  final int farmBasePrice;
+  final int farmPriceGrowth;
+  final int towerPrice;
+  final int strongTowerPrice;
+  final int farmIncome;
+  final int treeCutReward;
+  final List<int> unitUpkeep;
+  final int towerUpkeep;
+  final int strongTowerUpkeep;
+  final int port1Price;
+  final int port2Price;
+  final int boat1Price;
+  final int boat2Price;
+  final int port1Upkeep;
+  final int port2Upkeep;
+  final int boat1Upkeep;
+  final int boat2Upkeep;
+  final int boatMoveLimit;
+  final int portLaunchRadius;
+  final int boat1Capacity;
+  final int boat2Capacity;
+  final int seaFortPrice;
+  final int seaFortUpkeep;
+  final int navalSupplyUpkeep;
+  final List<int> artilleryCosts;
+  final List<int> artilleryUpkeep;
+  final List<int> artilleryAmmoCapacity;
+  // Retained for backwards-compatible mod loading. Artillery ammunition is
+  // automatic now, so the simulation no longer charges per shot.
+  final int artilleryShotCost;
+  final int initialMoney;
+  final double pineSpreadChance;
+  final double palmSpreadChance;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'unitMoveLimit': unitMoveLimit,
+    'unitPricePerLevel': unitPricePerLevel,
+    'farmBasePrice': farmBasePrice,
+    'farmPriceGrowth': farmPriceGrowth,
+    'towerPrice': towerPrice,
+    'strongTowerPrice': strongTowerPrice,
+    'farmIncome': farmIncome,
+    'treeCutReward': treeCutReward,
+    'unitUpkeep': unitUpkeep,
+    'towerUpkeep': towerUpkeep,
+    'strongTowerUpkeep': strongTowerUpkeep,
+    'port1Price': port1Price,
+    'port2Price': port2Price,
+    'boat1Price': boat1Price,
+    'boat2Price': boat2Price,
+    'port1Upkeep': port1Upkeep,
+    'port2Upkeep': port2Upkeep,
+    'boat1Upkeep': boat1Upkeep,
+    'boat2Upkeep': boat2Upkeep,
+    'boatMoveLimit': boatMoveLimit,
+    'portLaunchRadius': portLaunchRadius,
+    'boat1Capacity': boat1Capacity,
+    'boat2Capacity': boat2Capacity,
+    'seaFortPrice': seaFortPrice,
+    'seaFortUpkeep': seaFortUpkeep,
+    'navalSupplyUpkeep': navalSupplyUpkeep,
+    'artilleryCosts': artilleryCosts,
+    'artilleryUpkeep': artilleryUpkeep,
+    'artilleryAmmoCapacity': artilleryAmmoCapacity,
+    'artilleryShotCost': artilleryShotCost,
+    'initialMoney': initialMoney,
+    'pineSpreadChance': pineSpreadChance,
+    'palmSpreadChance': palmSpreadChance,
+  };
+
+  factory GameRules.fromJson(Map<String, dynamic> json) {
+    int readInt(String key, {int? fallback}) {
+      final value = json[key];
+      if (value is num && value.isFinite && value == value.roundToDouble()) {
+        return value.toInt();
+      }
+      if (fallback != null && value == null) return fallback;
+      throw FormatException('Mod rule "$key" must be an integer.');
+    }
+
+    double readChance(String key) {
+      final value = json[key];
+      if (value is! num || !value.isFinite) {
+        throw FormatException('Mod rule "$key" must be a number.');
+      }
+      final result = value.toDouble();
+      if (result < 0 || result > 1) {
+        throw FormatException('Mod rule "$key" must be between 0 and 1.');
+      }
+      return result;
+    }
+
+    List<int> readList(String key, List<int> fallback, int minimumLength) {
+      final raw = json[key] ?? fallback;
+      if (raw is! List || raw.length < minimumLength) {
+        throw FormatException(
+          'Mod rule "$key" must contain at least $minimumLength integers.',
+        );
+      }
+      final values = <int>[];
+      for (final value in raw) {
+        if (value is! num ||
+            !value.isFinite ||
+            value != value.roundToDouble()) {
+          throw FormatException('Mod rule "$key" contains a non-integer.');
+        }
+        values.add(value.toInt());
+      }
+      return List<int>.unmodifiable(values);
+    }
+
+    final rules = GameRules(
+      unitMoveLimit: readInt('unitMoveLimit'),
+      unitPricePerLevel: readInt('unitPricePerLevel'),
+      farmBasePrice: readInt('farmBasePrice'),
+      farmPriceGrowth: readInt('farmPriceGrowth'),
+      towerPrice: readInt('towerPrice'),
+      strongTowerPrice: readInt('strongTowerPrice'),
+      farmIncome: readInt('farmIncome'),
+      treeCutReward: readInt('treeCutReward'),
+      unitUpkeep: readList('unitUpkeep', const [0, 2, 6, 18, 36], 5),
+      towerUpkeep: readInt('towerUpkeep'),
+      strongTowerUpkeep: readInt('strongTowerUpkeep'),
+      port1Price: readInt('port1Price', fallback: 45),
+      port2Price: readInt('port2Price', fallback: 75),
+      boat1Price: readInt('boat1Price', fallback: 40),
+      boat2Price: readInt('boat2Price', fallback: 110),
+      port1Upkeep: readInt('port1Upkeep', fallback: 2),
+      port2Upkeep: readInt('port2Upkeep', fallback: 6),
+      boat1Upkeep: readInt('boat1Upkeep', fallback: 3),
+      boat2Upkeep: readInt('boat2Upkeep', fallback: 8),
+      boatMoveLimit: readInt('boatMoveLimit', fallback: 2),
+      portLaunchRadius: readInt('portLaunchRadius', fallback: 0),
+      boat1Capacity: readInt('boat1Capacity', fallback: 4),
+      boat2Capacity: readInt('boat2Capacity', fallback: 10),
+      seaFortPrice: readInt('seaFortPrice', fallback: 80),
+      seaFortUpkeep: readInt('seaFortUpkeep', fallback: 8),
+      navalSupplyUpkeep: readInt('navalSupplyUpkeep', fallback: 1),
+      artilleryCosts: readList('artilleryCosts', const [0, 50, 65, 90], 4),
+      artilleryUpkeep: readList('artilleryUpkeep', const [0, 4, 8, 14], 4),
+      artilleryAmmoCapacity: readList('artilleryAmmoCapacity', const [
+        0,
+        2,
+        4,
+        7,
+      ], 4),
+      artilleryShotCost: readInt('artilleryShotCost', fallback: 0),
+      initialMoney: readInt('initialMoney'),
+      pineSpreadChance: readChance('pineSpreadChance'),
+      palmSpreadChance: readChance('palmSpreadChance'),
+    );
+    rules._validate();
+    return rules;
+  }
+
+  void _validate() {
+    final nonNegative = <String, int>{
+      'farmBasePrice': farmBasePrice,
+      'farmPriceGrowth': farmPriceGrowth,
+      'towerPrice': towerPrice,
+      'strongTowerPrice': strongTowerPrice,
+      'farmIncome': farmIncome,
+      'treeCutReward': treeCutReward,
+      'towerUpkeep': towerUpkeep,
+      'strongTowerUpkeep': strongTowerUpkeep,
+      'port1Price': port1Price,
+      'port2Price': port2Price,
+      'boat1Price': boat1Price,
+      'boat2Price': boat2Price,
+      'port1Upkeep': port1Upkeep,
+      'port2Upkeep': port2Upkeep,
+      'boat1Upkeep': boat1Upkeep,
+      'boat2Upkeep': boat2Upkeep,
+      'portLaunchRadius': portLaunchRadius,
+      'seaFortPrice': seaFortPrice,
+      'seaFortUpkeep': seaFortUpkeep,
+      'navalSupplyUpkeep': navalSupplyUpkeep,
+      'artilleryShotCost': artilleryShotCost,
+      'initialMoney': initialMoney,
+    };
+    for (final entry in nonNegative.entries) {
+      if (entry.value < 0) {
+        throw FormatException('Mod rule "${entry.key}" cannot be negative.');
+      }
+    }
+    if (unitMoveLimit <= 0 || unitPricePerLevel <= 0 || boatMoveLimit <= 0) {
+      throw const FormatException(
+        'Move limits and unitPricePerLevel must be positive.',
+      );
+    }
+    if (boat1Capacity <= 0 || boat2Capacity < boat1Capacity) {
+      throw const FormatException(
+        'Boat capacities must be positive and level 2 cannot be smaller.',
+      );
+    }
+    for (final entry in <String, List<int>>{
+      'unitUpkeep': unitUpkeep,
+      'artilleryCosts': artilleryCosts,
+      'artilleryUpkeep': artilleryUpkeep,
+      'artilleryAmmoCapacity': artilleryAmmoCapacity,
+    }.entries) {
+      if (entry.value.any((value) => value < 0)) {
+        throw FormatException('Mod rule "${entry.key}" cannot be negative.');
+      }
+    }
+    if (artilleryAmmoCapacity[1] <= 0 ||
+        artilleryAmmoCapacity[2] < artilleryAmmoCapacity[1] ||
+        artilleryAmmoCapacity[3] < artilleryAmmoCapacity[2]) {
+      throw const FormatException(
+        'Artillery ammo capacities must be positive and non-decreasing.',
+      );
+    }
+  }
+}
+
+class GameMod {
+  const GameMod({
+    required this.id,
+    required this.name,
+    required this.title,
+    required this.version,
+    required this.rules,
+    required this.palette,
+    required this.neutralColor,
+    required this.waterColor,
+  });
+
+  final String id;
+  final String name;
+  final String title;
+  final int version;
+  final GameRules rules;
+  final List<Color> palette;
+  final Color neutralColor;
+  final Color waterColor;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'id': id,
+    'name': name,
+    'title': title,
+    'version': version,
+    'rules': rules.toJson(),
+    'palette': palette.map(_colorToHex).toList(growable: false),
+    'neutralColor': _colorToHex(neutralColor),
+    'waterColor': _colorToHex(waterColor),
+  };
+
+  static Future<GameMod> loadDefault() =>
+      loadAsset('assets/mods/default_mod.json');
+
+  static Future<GameMod> loadAsset(String path) async {
+    final json =
+        jsonDecode(await rootBundle.loadString(path)) as Map<String, dynamic>;
+    return GameMod.fromJson(json);
+  }
+
+  factory GameMod.fromJson(Map<String, dynamic> json) {
+    final id = json['id'];
+    final name = json['name'];
+    final title = json['title'];
+    final version = json['version'];
+    final rules = json['rules'];
+    final rawPalette = json['palette'];
+    final neutralColor = json['neutralColor'];
+    final waterColor = json['waterColor'];
+    if (id is! String ||
+        id.trim().isEmpty ||
+        name is! String ||
+        name.trim().isEmpty ||
+        title is! String ||
+        title.trim().isEmpty ||
+        version is! int ||
+        version <= 0 ||
+        rules is! Map ||
+        rawPalette is! List ||
+        rawPalette.length < 2 ||
+        neutralColor is! String ||
+        waterColor is! String) {
+      throw const FormatException('Invalid game mod metadata.');
+    }
+    final palette = rawPalette
+        .map((value) {
+          if (value is! String) {
+            throw const FormatException('Palette entries must be hex colours.');
+          }
+          return _parseColor(value);
+        })
+        .toList(growable: false);
+    return GameMod(
+      id: id,
+      name: name,
+      title: title,
+      version: version,
+      rules: GameRules.fromJson(rules.cast<String, dynamic>()),
+      palette: palette,
+      neutralColor: _parseColor(neutralColor),
+      waterColor: _parseColor(waterColor),
+    );
+  }
+
+  static Color _parseColor(String value) {
+    final hex = value.replaceFirst('#', '');
+    if (!RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(hex)) {
+      throw FormatException('Invalid colour value: $value');
+    }
+    return Color(int.parse('ff$hex', radix: 16));
+  }
+
+  static String _colorToHex(Color color) =>
+      '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
+}
