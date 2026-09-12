@@ -1,5 +1,6 @@
 """Review corrections for short game controls where context-free MT is ambiguous."""
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,5 +52,10 @@ for code, values in corrections.items():
     catalog = json.loads(path.read_text(encoding='utf-8'))
     for en, value in list(zip(keys, values)) + list(extra.get(code, {}).items()):
         catalog[sources[en]] = value
+    # Germanic MT sometimes joins a label to its row marker with a hyphen.
+    # Removing that marker must not leave '-Editor' in the shipped menu.
+    for source, value in catalog.items():
+        if re.match(r'^[-:;,]\s*[^\W\d_]', value) and not re.match(r'^[-:;,]', source):
+            catalog[source] = re.sub(r'^[-:;,]\s*', '', value)
     path.write_text(json.dumps(catalog, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
 print('Reviewed turn controls for 23 languages')
