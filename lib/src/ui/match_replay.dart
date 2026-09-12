@@ -312,7 +312,7 @@ class _MatchReplayScreenState extends State<MatchReplayScreen> {
         children: [
           Positioned.fill(
             bottom: 66,
-            child: IgnorePointer(child: HexBoard(controller: _controller)),
+            child: HexBoard(controller: _controller, readOnly: true),
           ),
           Positioned(
             left: 0,

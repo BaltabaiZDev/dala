@@ -68,11 +68,16 @@ double _twoDimensionalScale(Matrix4 transform) => math.sqrt(
 class HexBoard extends StatefulWidget {
   const HexBoard({
     required this.controller,
+    this.readOnly = false,
     this.onForeignDiplomacyRequested,
     super.key,
   });
 
   final GameController controller;
+
+  /// Allow camera gestures while disabling game commands and automatic
+  /// refocusing after the initial view, so a replay stays under viewer control.
+  final bool readOnly;
   final ValueChanged<int>? onForeignDiplomacyRequested;
 
   static const double hexRadius = 30;
@@ -448,6 +453,7 @@ class _HexBoardState extends State<HexBoard>
           _scheduleAnimationDetailSync();
         }
         final focusPlayer =
+            (widget.readOnly ? _focusedTurn : null) ??
             widget.controller.localPlayer ??
             (state.isHuman(state.turn)
                 ? state.turn
@@ -502,7 +508,7 @@ class _HexBoardState extends State<HexBoard>
             ).revealPoint(_transformation.value, point);
           });
         }
-        if (artilleryVolleys.isNotEmpty) {
+        if (!widget.readOnly && artilleryVolleys.isNotEmpty) {
           final serial = widget.controller.artilleryAnimationSerial;
           if (serial != _playedArtillerySerial) {
             _playedArtillerySerial = serial;
@@ -541,46 +547,60 @@ class _HexBoardState extends State<HexBoard>
                   RepaintBoundary(
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTapUp: (details) {
-                        final index = _nearestTile(
-                          details.localPosition,
-                          state,
-                        );
-                        if (index == null) return;
-                        if (state.hexes[index].active) {
-                          final diplomacyPlayer = widget.controller
-                              .diplomacyPlayerForTile(index);
-                          final openDiplomacy =
-                              widget.onForeignDiplomacyRequested;
-                          if (diplomacyPlayer != null &&
-                              openDiplomacy != null) {
-                            openDiplomacy(diplomacyPlayer);
-                          } else {
-                            widget.controller.tapTile(index);
-                          }
-                        } else {
-                          final waterIndex = _waterIndexForTile(index, state);
-                          if (waterIndex != null) {
-                            widget.controller.tapWaterCell(waterIndex);
-                          }
-                        }
-                      },
-                      onLongPressStart: (details) {
-                        final index = _nearestTile(
-                          details.localPosition,
-                          state,
-                        );
-                        if (index == null) return;
-                        if (state.hexes[index].active) {
-                          widget.controller.longPressTile(index);
-                        } else {
-                          final waterIndex = _waterIndexForTile(index, state);
-                          if (waterIndex != null) {
-                            widget.controller.longPressWaterCell(waterIndex);
-                          }
-                        }
-                      },
-                      onLongPressEnd: (_) => widget.controller.endLongPress(),
+                      onTapUp: widget.readOnly
+                          ? null
+                          : (details) {
+                              final index = _nearestTile(
+                                details.localPosition,
+                                state,
+                              );
+                              if (index == null) return;
+                              if (state.hexes[index].active) {
+                                final diplomacyPlayer = widget.controller
+                                    .diplomacyPlayerForTile(index);
+                                final openDiplomacy =
+                                    widget.onForeignDiplomacyRequested;
+                                if (diplomacyPlayer != null &&
+                                    openDiplomacy != null) {
+                                  openDiplomacy(diplomacyPlayer);
+                                } else {
+                                  widget.controller.tapTile(index);
+                                }
+                              } else {
+                                final waterIndex = _waterIndexForTile(
+                                  index,
+                                  state,
+                                );
+                                if (waterIndex != null) {
+                                  widget.controller.tapWaterCell(waterIndex);
+                                }
+                              }
+                            },
+                      onLongPressStart: widget.readOnly
+                          ? null
+                          : (details) {
+                              final index = _nearestTile(
+                                details.localPosition,
+                                state,
+                              );
+                              if (index == null) return;
+                              if (state.hexes[index].active) {
+                                widget.controller.longPressTile(index);
+                              } else {
+                                final waterIndex = _waterIndexForTile(
+                                  index,
+                                  state,
+                                );
+                                if (waterIndex != null) {
+                                  widget.controller.longPressWaterCell(
+                                    waterIndex,
+                                  );
+                                }
+                              }
+                            },
+                      onLongPressEnd: widget.readOnly
+                          ? null
+                          : (_) => widget.controller.endLongPress(),
                       child: CustomPaint(
                         isComplex: state.hexes.length < 1200,
                         // Our bounded textures replace Flutter's unbounded

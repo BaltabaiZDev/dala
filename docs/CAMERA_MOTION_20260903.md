@@ -63,3 +63,22 @@ small pan steps need fewer than six still-piece culling windows.
 These are deterministic input/render-work checks, not a smartphone FPS
 measurement or a guarantee that every device will never drop a frame.
 Final suite/build/browser results are recorded in the append-only MEMORY.md.
+
+## Replay camera fix — 1.0.6 (2026-09-12)
+
+The replay screen wrapped the whole board in `IgnorePointer`, also blocking
+the camera. It now uses `HexBoard.readOnly`: drag, pinch and wheel gestures
+remain available, while tile/water taps and long presses cannot issue game
+commands. The initial player view is retained, then replay turn changes and
+artillery events do not refocus the camera. Pausing, changing playback speed,
+reaching the final frame and restarting preserve the viewer's position/zoom.
+The explicit save-frame button continues to save the current recorded state.
+
+Three new widget regressions reproduce actual phone-sized drag/pinch input,
+panning across a human-turn change during playback, and safe tile taps/holds
+with an unchanged recording. The original code fails both camera regressions.
+All 28 replay, camera, polish and normal/LAN camera checks pass; `flutter analyze`
+reports no issues. Validation uses Flutter widget tests, not a physical phone.
+
+Android arm64 release: `build/DALA-1.0.6.apk`, versionCode 7, versionName 1.0.6.
+SHA-256: `BD117A116C05A0DAF24E9D1CCF281FF68F84B303EA14E422C444180AB8CCDE84`.
