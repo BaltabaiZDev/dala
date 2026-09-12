@@ -136,6 +136,88 @@ void main() {
             ),
       );
 
+      expect(
+        clientController.canUndo,
+        isTrue,
+        reason: 'Refreshing LAN status must retain the host undo permission',
+      );
+      expect(
+        hostController.canUndo,
+        isFalse,
+        reason: 'The host cannot undo the guest turn from its own controls',
+      );
+      clientController.undo();
+      expect(client.busy, isTrue);
+      expect(clientController.canUndo, isFalse);
+      await _waitFor(
+        'guest undoes diplomacy message',
+        () => !client.busy && clientController!.state.diplomacyMessages.isEmpty,
+      );
+      expect(clientController.canUndo, isFalse);
+
+      final money = clientController.state.provinces.last.money;
+      for (var strength = 1; strength <= 2; strength++) {
+        clientController.clearSelection();
+        clientController.tapTile(2);
+        clientController.setTool(PlayerTool.unit1);
+        clientController.tapTile(3);
+        await _waitFor(
+          'guest recruits strength $strength',
+          () =>
+              !client.busy &&
+              clientController!.state.hexes[3].unit?.strength == strength,
+        );
+        expect(clientController.canUndo, isTrue);
+      }
+
+      // A rejected stale command forces a full host snapshot. The availability
+      // comes from that snapshot even if the previous local UI cache was lost.
+      client.latestUi = {'canUndo': false};
+      client.revision--;
+      expect(
+        await client.sendCommandAsync(
+          'undo',
+          {},
+          clientController.captureNetworkUiState(),
+        ),
+        isFalse,
+      );
+      expect(clientController.state.hexes[3].unit!.strength, 2);
+      expect(clientController.canUndo, isTrue);
+
+      clientController.undo();
+      clientController.undo(); // Ignore an extra tap while awaiting the host.
+      await _waitFor(
+        'first recruitment undo acknowledged',
+        () =>
+            !client.busy &&
+            clientController!.state.hexes[3].unit?.strength == 1,
+      );
+      expect(clientController.canUndo, isTrue);
+      expect(
+        clientController.state.provinces.last.money,
+        money - mod.rules.unitPricePerLevel,
+      );
+      clientController.undo();
+      await _waitFor(
+        'second recruitment undo acknowledged',
+        () => !client.busy && clientController!.state.hexes[3].unit == null,
+      );
+      expect(clientController.state.provinces.last.money, money);
+      expect(clientController.canUndo, isFalse);
+      expect(hostController.state.toJson(), clientController.state.toJson());
+
+      // Leave history behind, then verify that another round cannot reuse it.
+      clientController.clearSelection();
+      clientController.tapTile(2);
+      clientController.setTool(PlayerTool.unit1);
+      clientController.tapTile(3);
+      await _waitFor(
+        'guest has one new undo entry',
+        () => !client.busy && clientController!.state.hexes[3].unit != null,
+      );
+      expect(clientController.canUndo, isTrue);
+
       await clientController.finishTurn();
       await _waitFor(
         'client end turn reaches host',
@@ -145,6 +227,50 @@ void main() {
         'final host snapshot reaches client',
         () => clientController!.state.turn == 0,
       );
+      expect(hostController.state.toJson(), clientController.state.toJson());
+      expect(clientController.canUndo, isFalse);
+      hostController.clearSelection();
+      hostController.tapTile(0);
+      hostController.setTool(PlayerTool.unit1);
+      hostController.tapTile(1);
+      await _waitFor(
+        'host purchase reaches guest',
+        () => clientController!.state.hexes[1].unit != null,
+      );
+      expect(hostController.canUndo, isTrue);
+      expect(clientController.canUndo, isFalse);
+      expect(
+        await client.sendCommandAsync('undo', {}, {'canUndo': true}),
+        isFalse,
+      );
+      expect(hostController.state.hexes[1].unit, isNotNull);
+      hostController.undo();
+      await _waitFor(
+        'host undo reaches guest',
+        () => clientController!.state.hexes[1].unit == null,
+      );
+      await hostController.finishTurn();
+      await _waitFor(
+        'next guest turn',
+        () => clientController!.state.turn == 1,
+      );
+      expect(clientController.canUndo, isFalse);
+      expect(clientController.captureNetworkUiState()['canUndo'], isFalse);
+      await client.close(notifyHost: false);
+      await _waitFor(
+        'disconnected turn skipped',
+        () => hostController!.state.turn == 0,
+      );
+      await client.connect(
+        address: '127.0.0.1:$port',
+        roomCode: host.roomCode,
+        name: 'Guest',
+      );
+      await _waitFor(
+        'guest reconnects to snapshot',
+        () => client.status == LanConnectionStatus.playing,
+      );
+      expect(clientController.canUndo, isFalse);
       expect(hostController.state.toJson(), clientController.state.toJson());
     },
   );

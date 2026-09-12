@@ -186,9 +186,15 @@ class GameController extends ChangeNotifier {
           state.turn == localPlayer ||
           _networkActor == state.turn);
 
+  /// The host owns the history; a client keeps only its advertised availability.
+  /// This is separate from whether this device may act right now.
+  bool get hasUndoHistory =>
+      networkDelegate == null ? _undoHistory.isNotEmpty : _networkCanUndo;
   bool get canUndo =>
-      (networkDelegate == null ? _undoHistory.isNotEmpty : _networkCanUndo) &&
-      !interactionsLocked;
+      hasUndoHistory &&
+      canControlCurrentTurn &&
+      !interactionsLocked &&
+      !networkBusy;
   bool get interactionsLocked =>
       turnTransitionActive ||
       aiThinking ||
@@ -217,7 +223,7 @@ class GameController extends ChangeNotifier {
     'defenseWaterCells': defensePreviewWaterCells.toList()..sort(),
     'defenseOpacity': defensePreviewOpacity,
     'artilleryRangePreview': artilleryRangePreview,
-    'canUndo': _undoHistory.isNotEmpty,
+    'canUndo': hasUndoHistory,
   };
 
   void applyNetworkUiState(Map<String, dynamic> json, {bool notify = true}) {

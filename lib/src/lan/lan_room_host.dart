@@ -337,6 +337,7 @@ class LanRoomHost extends ChangeNotifier {
       if (started && controller != null)
         'state': _networkState(controller!.state),
       if (started && controller != null) 'turnClock': _turnClockJson(),
+      if (started && controller != null) 'canUndo': controller!.hasUndoHistory,
     });
     _broadcastLobby();
     notifyListeners();
@@ -459,6 +460,7 @@ class LanRoomHost extends ChangeNotifier {
       'lobby': lobby.toJson(),
       'state': _networkState(gameController.state),
       'turnClock': _turnClockJson(),
+      'canUndo': gameController.hasUndoHistory,
     });
     notifyListeners();
   }
@@ -482,6 +484,7 @@ class LanRoomHost extends ChangeNotifier {
       'lobby': lobby.toJson(),
       'state': _networkState(gameController.state),
       'turnClock': _turnClockJson(),
+      'canUndo': gameController.hasUndoHistory,
     });
     notifyListeners();
   }
@@ -540,6 +543,7 @@ class LanRoomHost extends ChangeNotifier {
         'revision': revision,
         'state': _networkState(gameController.state),
         'turnClock': _turnClockJson(),
+        'canUndo': gameController.hasUndoHistory,
       });
     } else {
       _broadcast({
@@ -547,6 +551,7 @@ class LanRoomHost extends ChangeNotifier {
         'revision': revision,
         'patch': patch,
         'turnClock': _turnClockJson(),
+        'canUndo': gameController.hasUndoHistory,
       });
     }
     _refreshTurnClock();
@@ -604,6 +609,7 @@ class LanRoomHost extends ChangeNotifier {
       'revision': revision,
       'state': _networkState(controller!.state),
       'turnClock': _turnClockJson(),
+      'canUndo': controller!.hasUndoHistory,
     });
   }
 
@@ -704,6 +710,7 @@ class LanRoomHost extends ChangeNotifier {
       'id': commandId,
       'accepted': accepted,
       'revision': revision,
+      'canUndo': controller?.hasUndoHistory ?? false,
       'message': ?message,
       'ui': ?ui,
     });

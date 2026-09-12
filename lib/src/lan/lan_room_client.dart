@@ -136,6 +136,7 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
           lobby = _readLobby(message['lobby']);
           _updateSeatFromLobby();
           _readState(message['state']);
+          _readUndoAvailability(message['canUndo']);
           _readTurnClock(message['turnClock']);
           status = stateJson == null
               ? LanConnectionStatus.lobby
@@ -154,6 +155,7 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
           _updateSeatFromLobby();
           revision = (message['revision'] as num?)?.toInt() ?? revision;
           _readState(message['state']);
+          _readUndoAvailability(message['canUndo']);
           _readTurnClock(message['turnClock']);
           status = LanConnectionStatus.playing;
           break;
@@ -162,6 +164,7 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
           if (incoming >= revision) {
             revision = incoming;
             _readState(message['state']);
+            _readUndoAvailability(message['canUndo']);
             _readTurnClock(message['turnClock']);
           }
           break;
@@ -171,6 +174,7 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
           if (incoming >= revision && rawPatch is Map) {
             revision = incoming;
             _readStatePatch(rawPatch.cast<String, dynamic>());
+            _readUndoAvailability(message['canUndo']);
             _readTurnClock(message['turnClock']);
           }
           break;
@@ -187,6 +191,7 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
             latestUi = rawUi.cast<String, dynamic>();
             _boundController?.applyNetworkUiState(latestUi!);
           }
+          _readUndoAvailability(message['canUndo']);
           if (!accepted) {
             error =
                 message['message'] as String? ?? 'LAN әрекеті қабылданбады.';
@@ -266,6 +271,7 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
     next['modSnapshot'] = nextMod.toJson();
     GameState.fromJson(next);
     sessionMod = nextMod;
+    _clearUndoOnTurnChange(stateJson, next);
     stateJson = next;
     final controller = _boundController;
     if (controller != null) {
@@ -278,8 +284,34 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
     if (snapshot == null) {
       throw const FormatException('LAN толық күйі жоқ.');
     }
+    final previousTurn = {'turn': snapshot['turn'], 'round': snapshot['round']};
     applyLanPatchToJson(snapshot, patch);
+    _clearUndoOnTurnChange(previousTurn, snapshot);
     _boundController?.applyStatePatchFromNetwork(patch, uiState: latestUi);
+  }
+
+  void _clearUndoOnTurnChange(
+    Map<String, dynamic>? previous,
+    Map<String, dynamic> next,
+  ) {
+    if (previous?['turn'] != next['turn'] ||
+        previous?['round'] != next['round']) {
+      // Older hosts may omit the availability field. Never carry a previous
+      // turn's permission into a new turn or a newly bound controller.
+      latestUi = {...?latestUi, 'canUndo': false};
+    }
+  }
+
+  void _readUndoAvailability(Object? raw) {
+    if (raw is! bool) return;
+    latestUi = {...?latestUi, 'canUndo': raw};
+    final controller = _boundController;
+    if (controller != null) {
+      controller.applyNetworkUiState({
+        ...controller.captureNetworkUiState(),
+        'canUndo': raw,
+      }, notify: false);
+    }
   }
 
   void _readTurnClock(Object? raw) {
