@@ -14,6 +14,7 @@ import 'diplomacy_sheet.dart';
 import 'hex_board.dart';
 import 'match_replay.dart';
 import 'top_snack_bar.dart';
+import 'mod_build_menu.dart';
 
 enum GameScreenExit { restart, mainMenu }
 
@@ -125,8 +126,9 @@ class _GameScreenState extends State<GameScreen> {
             });
           }
           final narrowGroundPanel = MediaQuery.sizeOf(context).width < 720;
-          final bottomPanelHeight =
-              controller.selectedBoat?.owner == controller.state.turn
+          final bottomPanelHeight = controller.selectedAirUnit != null
+              ? 66.0
+              : controller.selectedBoat?.owner == controller.state.turn
               ? 60.0
               : controller.selectedOwnProvince == null
               ? 0.0
@@ -238,9 +240,10 @@ class _GameScreenState extends State<GameScreen> {
                           child: child,
                         ),
                       ),
-                      child:
-                          controller.selectedBoat?.owner ==
-                              controller.state.turn
+                      child: controller.selectedAirUnit != null
+                          ? ModAirPanel(controller: controller)
+                          : controller.selectedBoat?.owner ==
+                                controller.state.turn
                           ? _BoatCargoPanel(
                               key: const ValueKey('boat-cargo'),
                               controller: controller,
@@ -591,6 +594,8 @@ class _GameScreenState extends State<GameScreen> {
       ('Кемелер', report.boats),
       ('Теңіз қамалдары', report.seaForts),
       ('Десантты қолдау', report.navalTransfer),
+      if (report.modIncome != 0) ('Мод табысы', report.modIncome),
+      if (report.modUpkeep != 0) ('Мод шығыны', report.modUpkeep),
     ];
     await showModalBottomSheet<void>(
       context: context,
@@ -1309,6 +1314,9 @@ class _FastConstructionPanel extends StatelessWidget {
       ),
     ];
     final units = <Widget>[
+      if (controller.mod.buildings.isNotEmpty ||
+          controller.mod.units.isNotEmpty)
+        ModBuildButton(controller: controller),
       for (var strength = 1; strength <= 4; strength++)
         _FastBuildItem(
           label: '$strength-деңгейлі әскер',

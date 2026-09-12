@@ -128,6 +128,8 @@ class GameController extends ChangeNotifier {
   int? selectedTile;
   int? selectedWaterCell;
   int? selectedCargoIndex;
+  String? selectedModTypeId;
+  int? selectedAirTile;
   BoatBattleAnimation? boatBattleAnimation;
   SeaFortDestructionAnimation? seaFortDestructionAnimation;
   Set<int> defensePreviewTiles = const {};
@@ -207,6 +209,8 @@ class GameController extends ChangeNotifier {
     'selectedTile': selectedTile,
     'selectedWaterCell': selectedWaterCell,
     'selectedCargoIndex': selectedCargoIndex,
+    if (selectedModTypeId != null) 'selectedModTypeId': selectedModTypeId,
+    if (selectedAirTile != null) 'selectedAirTile': selectedAirTile,
     'toolIndex': tool.index,
     'hint': hint,
     'defenseTiles': defensePreviewTiles.toList()..sort(),
@@ -224,6 +228,17 @@ class GameController extends ChangeNotifier {
     }
 
     selectedTile = nullableIndex(json['selectedTile'], state.hexes.length);
+    final customType = json['selectedModTypeId'];
+    selectedModTypeId =
+        customType is String &&
+            (mod.buildings.containsKey(customType) ||
+                mod.units.containsKey(customType))
+        ? customType
+        : null;
+    selectedAirTile = nullableIndex(
+      json['selectedAirTile'],
+      state.hexes.length,
+    );
     selectedWaterCell = nullableIndex(
       json['selectedWaterCell'],
       state.waterCells.length,
@@ -602,77 +617,30 @@ class GameController extends ChangeNotifier {
   }
 
   Set<int> get visibleTileIndices {
-    final visibleState = viewState;
+    final state = viewState;
     if (!fogActive) {
-      return visibleState.hexes
-          .where((tile) => tile.active)
-          .map((tile) => tile.index)
-          .toSet();
+      return state.hexes.where((t) => t.active).map((t) => t.index).toSet();
     }
-    final owner = visibilityPlayer;
-    final visible = <int>{};
-    for (final tile in visibleState.hexes) {
-      if (!tile.active || !_viewAreAllies(owner, tile.owner)) continue;
-      final radius = switch (tile.object) {
-        TileObject.town => 4,
-        TileObject.strongTower => 5,
-        TileObject.tower => 3,
-        TileObject.port2 => 3,
-        TileObject.port1 => 2,
-        TileObject.artillery3 => 5,
-        TileObject.artillery2 => 4,
-        TileObject.artillery1 => 3,
-        _ => tile.unit == null ? 1 : 2,
-      };
-      _revealLandRadius(visibleState, tile.index, radius, visible);
-    }
-    // A fleet must be able to scout the shore it is touching. Previously
-    // boats only revealed water cells, so fog kept valid landing targets
-    // untappable even when a cargo unit could legally disembark there.
-    for (final cell in visibleState.waterCells) {
-      if (!cell.navigable) continue;
-      final boat = cell.boat;
-      final fort = cell.seaFort;
-      var coastRadius = 0;
-      if (boat != null && _viewAreAllies(owner, boat.owner)) {
-        coastRadius = boat.level >= 2 ? 2 : 1;
-      }
-      if (fort != null && _viewAreAllies(owner, fort.owner)) {
-        if (coastRadius < 2) coastRadius = 2;
-      }
-      if (coastRadius == 0) continue;
-      for (final coastTile in cell.coastTiles) {
-        if (coastTile < 0 || coastTile >= visibleState.hexes.length) continue;
-        if (!visibleState.hexes[coastTile].active) continue;
-        _revealLandRadius(visibleState, coastTile, coastRadius, visible);
-      }
-    }
-    return visible;
+    return landVisionTiles(
+      state,
+      mod,
+      (other) => _viewAreAllies(visibilityPlayer, other),
+    );
   }
 
   Set<int> get visibleWaterCellIndices {
-    final visibleState = viewState;
+    final state = viewState;
     if (!fogActive) {
-      return visibleState.waterCells
-          .where((cell) => cell.navigable)
-          .map((cell) => cell.index)
+      return state.waterCells
+          .where((c) => c.navigable)
+          .map((c) => c.index)
           .toSet();
     }
-    final owner = visibilityPlayer;
-    final tiles = visibleTileIndices;
-    final visible = <int>{};
-    for (final cell in visibleState.waterCells) {
-      if (cell.coastTiles.any(tiles.contains)) {
-        _revealWaterRadius(visibleState, cell.index, 1, visible);
-      }
-      if (_viewAreAllies(owner, cell.boat?.owner ?? -1)) {
-        _revealWaterRadius(visibleState, cell.index, 2, visible);
-      }
-      if (_viewAreAllies(owner, cell.seaFort?.owner ?? -1)) {
-        _revealWaterRadius(visibleState, cell.index, 3, visible);
-      }
-    }
-    return visible;
+    return waterVisionCells(
+      state,
+      mod,
+      (other) => _viewAreAllies(visibilityPlayer, other),
+    );
   }
 
   Set<int> get visiblePlayerIndices {
@@ -734,54 +702,6 @@ class GameController extends ChangeNotifier {
       }
     }
     return false;
-  }
-
-  void _revealLandRadius(
-    GameState visibleState,
-    int start,
-    int radius,
-    Set<int> visible,
-  ) {
-    final distances = <int, int>{start: 0};
-    final queue = <int>[start];
-    for (var cursor = 0; cursor < queue.length; cursor++) {
-      final index = queue[cursor];
-      visible.add(index);
-      final distance = distances[index]!;
-      if (distance >= radius) continue;
-      for (final neighbor in visibleState.hexes[index].neighbors) {
-        if (distances.containsKey(neighbor) ||
-            !visibleState.hexes[neighbor].active) {
-          continue;
-        }
-        distances[neighbor] = distance + 1;
-        queue.add(neighbor);
-      }
-    }
-  }
-
-  void _revealWaterRadius(
-    GameState visibleState,
-    int start,
-    int radius,
-    Set<int> visible,
-  ) {
-    final distances = <int, int>{start: 0};
-    final queue = <int>[start];
-    for (var cursor = 0; cursor < queue.length; cursor++) {
-      final index = queue[cursor];
-      if (index < 0 || index >= visibleState.waterCells.length) continue;
-      final cell = visibleState.waterCells[index];
-      if (!cell.navigable) continue;
-      visible.add(index);
-      final distance = distances[index]!;
-      if (distance >= radius) continue;
-      for (final neighbor in cell.neighbors) {
-        if (distances.containsKey(neighbor)) continue;
-        distances[neighbor] = distance + 1;
-        queue.add(neighbor);
-      }
-    }
   }
 
   bool isTileVisible(int index) =>
@@ -1134,6 +1054,18 @@ class GameController extends ChangeNotifier {
       selectedTile == null ? const {} : engine.moveTargets(selectedTile!);
 
   Set<int> get targetTiles {
+    if (selectedModTypeId != null) {
+      final province = selectedOwnProvince;
+      return province == null
+          ? {}
+          : engine.modBuildTargets(province.id, selectedModTypeId!);
+    }
+    if (selectedAirTile != null) {
+      return {
+        ...engine.airMoveTargets(selectedAirTile!),
+        ...engine.airAttackTargets(selectedAirTile!),
+      };
+    }
     if (tool == PlayerTool.select) {
       if (selectedWaterCell != null) {
         final cargoIndex = selectedCargoIndex;
@@ -1163,6 +1095,7 @@ class GameController extends ChangeNotifier {
   }
 
   Set<int> get targetWaterCells {
+    if (selectedAirTile != null || selectedModTypeId != null) return {};
     if (tool == PlayerTool.boat1 || tool == PlayerTool.boat2) {
       final province = selectedOwnProvince;
       final portTile = selectedTile;
@@ -1192,8 +1125,127 @@ class GameController extends ChangeNotifier {
     return const {};
   }
 
-  Province? get selectedProvince =>
-      selectedTile == null ? null : engine.provinceAt(selectedTile!);
+  Province? get selectedProvince {
+    final air = selectedAirUnit;
+    if (air != null) {
+      return state.provinces
+          .where((p) => p.id == air.homeProvinceId && p.owner == air.owner)
+          .firstOrNull;
+    }
+    return selectedTile == null ? null : engine.provinceAt(selectedTile!);
+  }
+
+  GameUnit? get selectedAirUnit =>
+      selectedAirTile == null || selectedAirTile! >= state.hexes.length
+      ? null
+      : state.hexes[selectedAirTile!].airUnit;
+
+  void selectModType(String id) {
+    if (!isLocalHumanTurn ||
+        interactionsLocked ||
+        state.winner != null ||
+        selectedOwnProvince == null ||
+        (!mod.buildings.containsKey(id) && !mod.units.containsKey(id))) {
+      return;
+    }
+    selectedTile = selectedOwnProvince!.capital;
+    selectedAirTile = null;
+    selectedWaterCell = null;
+    selectedCargoIndex = null;
+    tool = PlayerTool.select;
+    selectedModTypeId = id;
+    _cancelSelectionFade();
+    hint = 'Орнын таңдаңыз';
+    notifyListeners();
+  }
+
+  bool isBoardTileVisible(int index) {
+    if (index < 0 || index >= state.hexes.length) return false;
+    if (!fogActive) return true;
+    if (state.hexes[index].active) return isTileVisible(index);
+    final visibleWater = visibleWaterCellIndices;
+    return state.waterCells.any(
+      (cell) => visibleWater.contains(cell.index) && cell.tiles.contains(index),
+    );
+  }
+
+  /// Return true when the mod layer consumed a board tap; ordinary land and
+  /// sea input remains available below an aircraft on the next tap.
+  bool tapModTile(int index) {
+    if (!canControlCurrentTurn ||
+        state.winner != null ||
+        interactionsLocked ||
+        index < 0 ||
+        index >= state.hexes.length ||
+        !state.hexes[index].inWorld) {
+      return false;
+    }
+    final tile = state.hexes[index];
+    if (selectedModTypeId != null) {
+      final province = selectedOwnProvince;
+      if (province == null || !isBoardTileVisible(index)) return true;
+      if (_forwardNetworkCommand('tapModTile', {'index': index})) return true;
+      final snapshot = _takeSnapshot();
+      final changed = engine.buildModType(
+        province.id,
+        index,
+        selectedModTypeId!,
+      );
+      if (changed) {
+        selectedModTypeId = null;
+        if (tile.airUnit?.owner == state.turn) {
+          selectedAirTile = index;
+          selectedTile = null;
+        }
+        hint = 'Дайын';
+        _rememberSnapshot(snapshot);
+      } else {
+        hint = 'Ақша аз немесе орын бос емес';
+      }
+      notifyListeners();
+      return true;
+    }
+    if (selectedAirTile != null) {
+      final from = selectedAirTile!;
+      if (from == index) {
+        selectedAirTile = null;
+        notifyListeners();
+        return false;
+      }
+      final attack =
+          isBoardTileVisible(index) &&
+          engine.airAttackTargets(from).contains(index);
+      final move = engine.airMoveTargets(from).contains(index);
+      if (attack || move) {
+        if (_forwardNetworkCommand('tapModTile', {'index': index})) return true;
+        final snapshot = _takeSnapshot();
+        final changed = attack
+            ? engine.attackWithAirUnit(from, index)
+            : engine.moveAirUnit(from, index);
+        if (changed) {
+          if (!attack) selectedAirTile = index;
+          hint = attack ? 'Шабуыл жасалды' : 'Жүріс жасалды';
+          _rememberSnapshot(snapshot);
+        }
+        notifyListeners();
+        return true;
+      }
+      selectedAirTile = null;
+    }
+    if (tool == PlayerTool.select &&
+        tile.airUnit?.owner == state.turn &&
+        isBoardTileVisible(index)) {
+      _cancelSelectionFade();
+      selectedAirTile = index;
+      selectedTile = selectedWaterCell = selectedCargoIndex = null;
+      hint = tile.airUnit!.ready
+          ? 'Жасыл ұяшықтардың бірін таңдаңыз'
+          : 'Осы ходта жүріп болды';
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
 
   Province? get selectedOwnProvince {
     final province = selectedProvince;
@@ -1282,6 +1334,8 @@ class GameController extends ChangeNotifier {
       return;
     }
     _cancelSelectionFade();
+    selectedModTypeId = null;
+    selectedAirTile = null;
     if (value == PlayerTool.port2) {
       tool = PlayerTool.select;
       hint = '2-деңгейлі порт тек порттың өз панелінен дамытылады';
@@ -1341,6 +1395,8 @@ class GameController extends ChangeNotifier {
 
   void clearSelection() {
     _cancelSelectionFade();
+    selectedModTypeId = null;
+    selectedAirTile = null;
     selectedTile = null;
     selectedWaterCell = null;
     selectedCargoIndex = null;
@@ -1418,11 +1474,14 @@ class GameController extends ChangeNotifier {
   }
 
   void tapTile(int index) {
+    if (index < 0 || index >= state.hexes.length) return;
     if (!canControlCurrentTurn || state.winner != null || interactionsLocked) {
       return;
     }
     final tile = state.hexes[index];
     if (!tile.active || !isTileVisible(index)) return;
+    selectedModTypeId = null;
+    selectedAirTile = null;
     final mutatesState =
         tool != PlayerTool.select ||
         (selectedWaterCell != null && targetTiles.contains(index)) ||
@@ -1523,6 +1582,8 @@ class GameController extends ChangeNotifier {
     }
     final cell = engine.waterCellById(index);
     if (cell == null || !isWaterCellVisible(index)) return;
+    selectedModTypeId = null;
+    selectedAirTile = null;
     final mutatesState =
         tool != PlayerTool.select ||
         (selectedTile != null && targetWaterCells.contains(index)) ||
@@ -1891,6 +1952,8 @@ class GameController extends ChangeNotifier {
     selectedTile = snapshot['selectedTile'] as int?;
     selectedWaterCell = snapshot['selectedWaterCell'] as int?;
     selectedCargoIndex = snapshot['selectedCargoIndex'] as int?;
+    selectedAirTile = snapshot['selectedAirTile'] as int?;
+    selectedModTypeId = null;
     boatBattleAnimation = null;
     seaFortDestructionAnimation = null;
     _cancelSelectionFade();
@@ -1904,6 +1967,7 @@ class GameController extends ChangeNotifier {
     'selectedTile': selectedTile,
     'selectedWaterCell': selectedWaterCell,
     'selectedCargoIndex': selectedCargoIndex,
+    if (selectedAirTile != null) 'selectedAirTile': selectedAirTile,
   });
 
   void _rememberSnapshot(String snapshot) {
@@ -1947,6 +2011,8 @@ class GameController extends ChangeNotifier {
       _cancelSelectionFade();
       _undoHistory.clear();
       selectedTile = null;
+      selectedModTypeId = null;
+      selectedAirTile = null;
       selectedWaterCell = null;
       selectedCargoIndex = null;
       tool = PlayerTool.select;

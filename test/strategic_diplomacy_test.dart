@@ -450,7 +450,7 @@ void main() {
       final saved = EditorRepository.decodeStateJson(copy, rules: mod.rules)!;
       expect(saved.diplomacyProposals.single.rationale, proposal.rationale);
       expect(saved.diplomacySocial.relationship(0, 1), 50);
-      expect(lanProtocolVersion, 7);
+      expect(lanProtocolVersion, 8);
       expect(
         e.proposeExchange(
           from: 1,

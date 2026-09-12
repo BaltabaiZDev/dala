@@ -28,6 +28,8 @@ class ModStack {
     final result = Map<String, dynamic>.from(baseline);
     final rules = Map<String, dynamic>.from(base.rules.toJson());
     final sprites = Map<String, String>.from(base.sprites);
+    final buildings = <String, ModBuilding>{...base.buildings};
+    final units = <String, ModUnitType>{...base.units};
     final owners = <String, String>{};
     final values = <String, String>{};
     final conflicts = <ModConflict>[];
@@ -41,6 +43,8 @@ class ModStack {
     }
 
     for (final mod in mods) {
+      buildings.addAll(mod.buildings);
+      units.addAll(mod.units);
       for (final entry in mod.rules.toJson().entries) {
         if (jsonEncode(entry.value) ==
             jsonEncode(base.rules.toJson()[entry.key])) {
@@ -71,6 +75,10 @@ class ModStack {
       'version': 1,
       'rules': rules,
       'sprites': sprites,
+      if (buildings.isNotEmpty)
+        'buildings': buildings.values.map((v) => v.toJson()).toList(),
+      if (units.isNotEmpty)
+        'units': units.values.map((v) => v.toJson()).toList(),
       'components': mods.map((m) => m.reference.toJson()).toList(),
     });
     return ModStack(GameMod.fromJson(result), List.unmodifiable(conflicts));

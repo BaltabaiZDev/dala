@@ -1,4 +1,5 @@
 import '../l10n/game_locale.dart';
+import '../modding/example_mod.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../modding/content_files.dart';
@@ -80,11 +81,11 @@ class _ContentScreenState extends State<ContentScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GameText(
-            'Модтар бар әскер мен ғимараттардың ережелерін, суреттерін және түстерін өзгертеді. Өз карталарын қоса алады.',
+            'Модтар жаңа ғимарат, құрлық әскері және ұшақ түрлерін қосады. Бағасын, шығынын, қозғалысын, қорғанысын және көру радиусын өзгертуге болады.',
           ),
           SizedBox(height: 12),
           GameText(
-            'Жаңа қызметі бар нысандар, радар, ұшақ және скрипттер әзірге қолдау таппайды.',
+            'Үлгіде радар, аэродром, барлаушы және ұшақ бар. Ережелер JSON арқылы беріледі; орындалатын скрипттер қосылмайды.',
           ),
         ],
       ),
@@ -117,16 +118,9 @@ class _ContentScreenState extends State<ContentScreen> {
   });
 
   Future<void> _template() => _run(() async {
-    final raw = widget.library.defaultMod.toJson()
-      ..['id'] = 'my_dala_mod'
-      ..['name'] = 'Менің модым'
-      ..['title'] = 'Менің далам'
-      ..['author'] = 'Мод авторы'
-      ..['description'] =
-          'mod.json ішіндегі rules пен palette өрістерін өзгертіңіз.';
     await ContentFiles.save(
       'my_dala_mod.dalamod',
-      ContentPackage(mod: GameMod.fromJson(raw)).encode(),
+      ContentPackage(mod: createExampleMod(widget.library.defaultMod)).encode(),
     );
   });
 

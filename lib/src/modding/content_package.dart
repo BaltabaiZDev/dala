@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 
 import '../game/models.dart';
+import '../game/game_engine.dart';
 import '../persistence/editor_repository.dart';
 import 'game_mod.dart';
 
@@ -95,7 +96,7 @@ class ContentPackage {
       final root = jsonDecode(utf8.decode(manifest.content));
       if (root is! Map ||
           root['format'] != 'dala-mod' ||
-          root['version'] != 1 ||
+          !const [1, 2].contains(root['version']) ||
           root['mod'] is! Map) {
         throw const FormatException('Бұл DALA мод пакеті емес.');
       }
@@ -151,7 +152,11 @@ class ContentPackage {
       ArchiveFile.bytes(
         'mod.json',
         utf8.encode(
-          jsonEncode({'format': 'dala-mod', 'version': 1, 'mod': raw}),
+          jsonEncode({
+            'format': 'dala-mod',
+            'version': mod.buildings.isEmpty && mod.units.isEmpty ? 1 : 2,
+            'mod': raw,
+          }),
         ),
       ),
     );
@@ -205,6 +210,10 @@ class DalaMap {
   }
 
   factory DalaMap.fromState(String name, GameState state, GameMod mod) {
+    GameEngine(
+      mod: mod,
+      state: GameState.fromJson(state.toJson()),
+    ).validateModState();
     if (!EditorRepository.isValidState(
       state,
       expectedModId: mod.id,
@@ -231,7 +240,7 @@ class DalaMap {
       final raw = jsonDecode(utf8.decode(bytes));
       if (raw is! Map ||
           raw['format'] != 'dala-map' ||
-          raw['version'] != 1 ||
+          !const [1, 2].contains(raw['version']) ||
           raw['state'] is! Map) {
         throw const FormatException('Бұл .dalamap картасы емес.');
       }
@@ -318,6 +327,7 @@ class DalaMap {
       throw const FormatException('Карта осы ережелермен ойналмайды.');
     }
     state.modSnapshot = mod.toJson();
+    GameEngine(mod: mod, state: state).validateModState();
     return state;
   }
 
@@ -325,7 +335,20 @@ class DalaMap {
     utf8.encode(
       jsonEncode({
         'format': 'dala-map',
-        'version': 1,
+        'version':
+            (stateJson['hexes'] as List).any(
+                  (tile) =>
+                      tile['buildingTypeId'] != null ||
+                      tile['airUnit'] != null ||
+                      tile['unit']?['typeId'] != null,
+                ) ||
+                (stateJson['waterCells'] as List? ?? []).any(
+                  (cell) => (cell['boat']?['cargo'] as List? ?? []).any(
+                    (unit) => unit['typeId'] != null,
+                  ),
+                )
+            ? 2
+            : 1,
         'name': name,
         if (requiredModHash != null) 'requiredModHash': requiredModHash,
         if (requiredMods.isNotEmpty)

@@ -65,7 +65,7 @@ class ClassicSprites {
       'diplomacy_black_mark',
     ];
     final result = <String, ui.Image>{};
-    for (final name in names) {
+    for (final name in {...names, ...overrides.keys}) {
       final encoded = overrides[name];
       if (encoded == null) {
         result[name] = await DalaArt.rasterize(name);
@@ -91,7 +91,7 @@ class ClassicSprites {
       final masks = result.entries
           .where(
             (entry) =>
-                entry.key.endsWith('_team') ||
+                (names.contains(entry.key) && entry.key.endsWith('_team')) ||
                 entry.key == 'naval_supply_link' ||
                 entry.key == 'sea_fort',
           )

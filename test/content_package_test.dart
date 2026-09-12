@@ -166,7 +166,7 @@ void main() {
         ),
         throwsFormatException,
       );
-      final root = {'format': 'dala-mod', 'version': 2, 'mod': mod.toJson()};
+      final root = {'format': 'dala-mod', 'version': 99, 'mod': mod.toJson()};
       expect(
         () => ContentPackage.decode(
           zip({'mod.json': utf8.encode(jsonEncode(root))}),

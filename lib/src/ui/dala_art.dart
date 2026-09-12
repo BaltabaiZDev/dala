@@ -43,6 +43,15 @@ class DalaArt {
   }
 
   static void draw(Canvas c, String name, {Color? tint}) {
+    if (name == 'infantry' || name == 'scout') {
+      draw(c, name == 'scout' ? 'man1' : 'man0');
+      draw(
+        c,
+        name == 'scout' ? 'man1_team' : 'man0_team',
+        tint: tint ?? DalaTheme.gold,
+      );
+      return;
+    }
     name = name.split('/').last.replaceAll('.png', '');
     final mask = name.endsWith('_team');
     final key = name.replaceAll('_team', '');
@@ -89,6 +98,80 @@ class DalaArt {
       }
     }
 
+    if (key == 'radar') {
+      box(const Rect.fromLTWH(13, 45, 38, 10), wood);
+      line(const Offset(32, 45), const Offset(32, 29), ink, 5);
+      path(
+        Path()
+          ..moveTo(14, 19)
+          ..quadraticBezierTo(16, 44, 43, 36)
+          ..close(),
+        cream,
+      );
+      line(const Offset(25, 29), const Offset(39, 15), tint ?? accent, 3);
+      c.drawArc(
+        const Rect.fromLTWH(24, 7, 27, 27),
+        -math.pi / 2,
+        math.pi / 2,
+        false,
+        Paint()
+          ..color = tint ?? accent
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3,
+      );
+      return;
+    }
+    if (key == 'airfield' || key == 'factory' || key == 'building') {
+      box(const Rect.fromLTWH(9, 27, 44, 27), cream);
+      path(
+        Path()
+          ..moveTo(7, 27)
+          ..lineTo(31, 13)
+          ..lineTo(56, 27)
+          ..close(),
+        tint ?? accent,
+      );
+      box(const Rect.fromLTWH(17, 34, 17, 20), ink, 2);
+      if (key == 'airfield') {
+        path(
+          Path()
+            ..moveTo(37, 36)
+            ..lineTo(44, 29)
+            ..lineTo(55, 54)
+            ..lineTo(37, 54)
+            ..close(),
+          blueSteel,
+        );
+        line(const Offset(44, 37), const Offset(47, 48), cream, 2);
+      } else if (key == 'factory') {
+        box(const Rect.fromLTWH(43, 8, 8, 32), wood, 1);
+        oval(const Rect.fromLTWH(42, 2, 12, 5), blueSteel);
+      }
+      return;
+    }
+    if (key == 'aircraft') {
+      oval(const Rect.fromLTWH(14, 49, 39, 5), const Color(0x4030463b));
+      path(
+        Path()
+          ..moveTo(32, 6)
+          ..lineTo(36, 26)
+          ..lineTo(57, 39)
+          ..lineTo(57, 44)
+          ..lineTo(36, 36)
+          ..lineTo(35, 48)
+          ..lineTo(43, 54)
+          ..lineTo(21, 54)
+          ..lineTo(29, 48)
+          ..lineTo(28, 36)
+          ..lineTo(7, 44)
+          ..lineTo(7, 39)
+          ..lineTo(28, 26)
+          ..close(),
+        cream,
+      );
+      line(const Offset(32, 20), const Offset(32, 40), tint ?? accent, 4);
+      return;
+    }
     if (!mask &&
         (key.startsWith('man') ||
             key == 'castle' ||

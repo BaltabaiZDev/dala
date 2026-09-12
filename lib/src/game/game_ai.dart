@@ -5,6 +5,7 @@ import 'classic_master_ai.dart';
 import 'diplomacy_ai.dart';
 import 'game_engine.dart';
 import 'models.dart';
+part 'mod_ai.dart';
 
 typedef _AiAction = bool Function();
 
@@ -24,6 +25,8 @@ class GameAi {
   final Set<GameUnit> _turnLandUnits = <GameUnit>{};
   final Set<GameBoat> _turnBoats = <GameBoat>{};
   final Map<GameUnit, int> _landUnitLocations = <GameUnit, int>{};
+  final Set<int> _modBuildProvinces = {};
+  final Set<GameUnit> _modAircraftTried = {};
   _JavaRandom? _turnRandom;
   int _landUnitsBuilt = 0;
   ClassicMasterTurnReport? lastClassicMasterReport;
@@ -43,12 +46,16 @@ class GameAi {
   /// admiral, engineer, or opportunist. Exposed for deterministic simulations.
   int get personalityId => _personality;
 
-  bool get usesClassicMasterLand => ClassicMasterAi.shouldRunFor(engine.state);
+  bool get usesClassicMasterLand =>
+      mod.buildings.isEmpty &&
+      mod.units.isEmpty &&
+      ClassicMasterAi.shouldRunFor(engine.state);
 
   void takeTurn() {
     final state = engine.state;
     if (state.winner != null) return;
     _beginTurn();
+    for (var i = 0; i < 64 && _takeModAction(); i++) {}
     if (usesClassicMasterLand) {
       lastClassicMasterReport = ClassicMasterAi(
         mod: mod,
@@ -82,6 +89,9 @@ class GameAi {
     final frameBudget = Stopwatch()..start();
     onProgress?.call(.02);
     if (yieldBeforeWork) await _yieldFrame(frameBudget);
+    for (var i = 0; i < 64 && _takeModAction(); i++) {
+      if (_sliceExpired(frameBudget)) await _yieldFrame(frameBudget);
+    }
     if (state.winner != null) return;
 
     if (usesClassicMasterLand) {
@@ -137,6 +147,8 @@ class GameAi {
   }
 
   void _beginTurn() {
+    _modBuildProvinces.clear();
+    _modAircraftTried.clear();
     final state = engine.state;
     _landUnitsBuilt = 0;
     _turnRandom = _JavaRandom(

@@ -4,6 +4,8 @@ import '../modding/game_mod.dart';
 import 'models.dart';
 
 part 'diplomacy_rules.dart';
+part 'mod_rules.dart';
+part 'visibility_rules.dart';
 
 class EconomicBreakdown {
   const EconomicBreakdown({
@@ -20,6 +22,8 @@ class EconomicBreakdown {
     required this.seaForts,
     required this.navalTransfer,
     required this.navalSupport,
+    this.modIncome = 0,
+    this.modUpkeep = 0,
   });
 
   final int land;
@@ -35,6 +39,8 @@ class EconomicBreakdown {
   final int seaForts;
   final int navalTransfer;
   final int navalSupport;
+  final int modIncome;
+  final int modUpkeep;
 
   int get units => landUnits + cargoUnits;
 
@@ -51,7 +57,9 @@ class EconomicBreakdown {
       boats +
       seaForts +
       navalTransfer +
-      navalSupport;
+      navalSupport +
+      modIncome +
+      modUpkeep;
 
   EconomicBreakdown operator +(EconomicBreakdown other) => EconomicBreakdown(
     land: land + other.land,
@@ -67,6 +75,8 @@ class EconomicBreakdown {
     seaForts: seaForts + other.seaForts,
     navalTransfer: navalTransfer + other.navalTransfer,
     navalSupport: navalSupport + other.navalSupport,
+    modIncome: modIncome + other.modIncome,
+    modUpkeep: modUpkeep + other.modUpkeep,
   );
 
   static const zero = EconomicBreakdown(
@@ -139,6 +149,7 @@ enum SeaFortBuildBlock {
 
 class GameEngine {
   GameEngine({required this.mod, required this.state}) {
+    validateModState();
     // Legacy military treaties had no timer. Give them a finite grace period.
     for (var a = 0; a < state.config.playerCount; a++) {
       for (var b = a + 1; b < state.config.playerCount; b++) {
@@ -393,6 +404,7 @@ class GameEngine {
     if (status == DiplomacyStatus.war && previous != DiplomacyStatus.war) {
       _clearHostileObligations(first, second);
     }
+    normalizeModAssets();
   }
 
   int diplomacyCooldown(int first, int second) {
@@ -1317,11 +1329,12 @@ class GameEngine {
           tile.object != TileObject.strongTower &&
           tile.object != TileObject.port1 &&
           tile.object != TileObject.port2 &&
-          _artilleryLevel(tile.object) == 0;
+          _artilleryLevel(tile.object) == 0 &&
+          tile.buildingTypeId == null;
       if (open &&
           (tile.unit == null ||
               (unitOwnerAt(index) == owner &&
-                  tile.unit!.strength + unit.strength <= 4))) {
+                  canMergeUnits(tile.unit!, unit)))) {
         candidates.add(tile);
       }
     }
@@ -1347,7 +1360,7 @@ class GameEngine {
       final treasury =
           homes.where((p) => p.id == unit.homeProvinceId).firstOrNull ??
           homes.first;
-      final refund = unit.strength * mod.rules.unitPricePerLevel;
+      final refund = unitPrice(unit);
       treasury.money += refund;
       _logDiplomacy(
         '${state.playerName(owner)}: қайтқан әскерге орын жоқ; қазынаға $refund ақша қайтарылды',
@@ -1547,6 +1560,9 @@ class GameEngine {
   int diplomacyLandPrice(int index) {
     if (index < 0 || index >= state.hexes.length) return 0;
     final tile = state.hexes[index];
+    final custom = modBuildingAt(index);
+    if (custom != null) return 25 + custom.price;
+    if (tile.unit?.typeId != null) return 25 + unitPrice(tile.unit!);
     if (tile.unit != null) return 25 + 15 * tile.unit!.strength;
     return switch (tile.object) {
       TileObject.pine || TileObject.palm => 15,
@@ -1570,7 +1586,10 @@ class GameEngine {
         if (boat == null) return 0;
         final cargoValue = boat.cargo.fold<int>(
           0,
-          (sum, unit) => sum + 25 + 15 * unit.strength,
+          (sum, unit) =>
+              sum +
+              25 +
+              (unit.typeId == null ? 15 * unit.strength : unitPrice(unit)),
         );
         return (boat.level == 1 ? mod.rules.boat1Price : mod.rules.boat2Price) +
             cargoValue;
@@ -1773,9 +1792,16 @@ class GameEngine {
     var navalTransfer = 0;
     var navalSupport = 0;
     var diplomacy = 0;
+    var modIncome = 0;
+    var modUpkeep = 0;
     navalSupport += _navalSupportForProvince(province);
     for (final index in province.tiles) {
       final tile = state.hexes[index];
+      final custom = modBuildingAt(index);
+      if (custom != null) {
+        modIncome += custom.income;
+        modUpkeep -= custom.upkeep;
+      }
       if (tile.object == TileObject.farm && !state.config.slayRules) {
         farms += mod.rules.farmIncome;
       }
@@ -1794,13 +1820,17 @@ class GameEngine {
       if (tile.object == TileObject.port2) ports -= mod.rules.port2Upkeep;
     }
     for (final tile in state.hexes) {
+      final air = tile.airUnit;
+      if (air?.owner == province.owner && air?.homeProvinceId == province.id) {
+        modUpkeep -= unitMaintenance(air!);
+      }
       final unit = tile.unit;
       if (unit == null ||
           unitOwnerAt(tile.index) != province.owner ||
           unitHomeProvinceAt(tile.index) != province.id) {
         continue;
       }
-      landUnits -= _unitUpkeep(unit.strength);
+      landUnits -= unitMaintenance(unit);
     }
     for (final cell in state.waterCells) {
       final boat = cell.boat;
@@ -1811,7 +1841,7 @@ class GameEngine {
       }
       boats -= boat.level == 1 ? mod.rules.boat1Upkeep : mod.rules.boat2Upkeep;
       for (final unit in boat.cargo) {
-        final landCost = _unitUpkeep(unit.strength);
+        final landCost = unitMaintenance(unit);
         cargoUnits -= (landCost * 3) ~/ 2;
       }
       if (_primaryNavalProvinceForBoat(cell, boat) != null) {
@@ -1881,6 +1911,8 @@ class GameEngine {
       seaForts: seaForts,
       navalTransfer: navalTransfer,
       navalSupport: navalSupport,
+      modIncome: modIncome,
+      modUpkeep: modUpkeep,
     );
   }
 
@@ -1899,7 +1931,11 @@ class GameEngine {
 
   int income(Province province) {
     final report = economicBreakdown(province, includeDiplomacy: false);
-    return report.land + report.farms + report.trees + report.navalSupport;
+    return report.land +
+        report.farms +
+        report.trees +
+        report.navalSupport +
+        report.modIncome;
   }
 
   int _unitUpkeep(int strength) {
@@ -1928,7 +1964,8 @@ class GameEngine {
         report.ports +
         report.boats +
         report.seaForts +
-        report.navalTransfer);
+        report.navalTransfer +
+        report.modUpkeep);
   }
 
   int balance(Province province) => economicBreakdown(province).total;
@@ -1963,6 +2000,7 @@ class GameEngine {
 
   int _tileDefense(HexTile tile) {
     var defense = tile.unit?.strength ?? 0;
+    defense = math.max(defense, modBuildingAt(tile.index)?.defense ?? 0);
     defense = switch (tile.object) {
       TileObject.town => math.max(defense, 1),
       TileObject.port1 ||
@@ -2050,7 +2088,7 @@ class GameEngine {
     for (var cursor = 0; cursor < queue.length; cursor++) {
       final index = queue[cursor];
       final nextDistance = distance[index]! + 1;
-      if (nextDistance > mod.rules.unitMoveLimit) continue;
+      if (nextDistance > unitMovement(source.unit!)) continue;
       for (final neighbor in state.hexes[index].neighbors) {
         final target = state.hexes[neighbor];
         if (!target.active) continue;
@@ -2079,6 +2117,7 @@ class GameEngine {
   bool _canOccupyFriendly(GameUnit unit, HexTile target, {int? actor}) {
     final movingOwner = actor ?? (unit.owner >= 0 ? unit.owner : state.turn);
     if (!_canTraverseLand(movingOwner, target) ||
+        target.buildingTypeId != null ||
         target.object == TileObject.town ||
         target.object == TileObject.farm ||
         target.object == TileObject.tower ||
@@ -2090,7 +2129,7 @@ class GameEngine {
     }
     if (target.unit == null) return true;
     return unitOwnerAt(target.index) == movingOwner &&
-        target.unit!.strength + unit.strength <= 4;
+        canMergeUnits(target.unit!, unit);
   }
 
   /// Reconstructs the same bounded shortest route as the move flood-fill.
@@ -2119,7 +2158,7 @@ class GameEngine {
       cursor++
     ) {
       final index = queue[cursor];
-      if (distances[index]! >= mod.rules.unitMoveLimit ||
+      if (distances[index]! >= unitMovement(unit) ||
           !_canTraverseLand(actor, state.hexes[index])) {
         continue;
       }
@@ -2399,6 +2438,7 @@ class GameEngine {
 
   bool _canPlaceBoughtUnitFriendly(HexTile target, int strength) {
     if (target.owner != state.turn) return false;
+    if (target.buildingTypeId != null) return false;
     if (target.object == TileObject.town ||
         target.object == TileObject.farm ||
         target.object == TileObject.tower ||
@@ -2410,6 +2450,7 @@ class GameEngine {
     }
     return target.unit == null ||
         (unitOwnerAt(target.index) == state.turn &&
+            target.unit!.typeId == null &&
             target.unit!.strength + strength <= 4);
   }
 
@@ -2485,7 +2526,7 @@ class GameEngine {
     if (price < 0 || province.money < price) return {};
     return province.tiles.where((index) {
       final tile = state.hexes[index];
-      if (tile.unit != null) return false;
+      if (tile.unit != null || tile.buildingTypeId != null) return false;
       if (object == TileObject.strongTower && tile.object == TileObject.tower) {
         return true;
       }
@@ -3053,13 +3094,15 @@ class GameEngine {
 
   Set<int> _reachableFriendlyTiles(int fromTile, [int? owner]) {
     final actor = owner ?? state.turn;
+    final unit = state.hexes[fromTile].unit;
+    final limit = unit == null ? mod.rules.unitMoveLimit : unitMovement(unit);
     final result = <int>{fromTile};
     final distance = <int, int>{fromTile: 0};
     final queue = <int>[fromTile];
     for (var cursor = 0; cursor < queue.length; cursor++) {
       final index = queue[cursor];
       final nextDistance = distance[index]! + 1;
-      if (nextDistance > mod.rules.unitMoveLimit) continue;
+      if (nextDistance > limit) continue;
       for (final neighbor in state.hexes[index].neighbors) {
         final tile = state.hexes[neighbor];
         if (!tile.active ||
@@ -3108,7 +3151,7 @@ class GameEngine {
     if (cargoIndex < 0 || cargoIndex >= boat.cargo.length) return {};
     final unit = boat.cargo[cargoIndex];
     if (!unit.ready) return {};
-    return _navalLandingDistances(cell).keys.where((index) {
+    return _navalLandingDistances(cell, unit).keys.where((index) {
       final target = state.hexes[index];
       if (!target.active) return false;
       if (_canTraverseLand(boat.owner, target)) {
@@ -3123,7 +3166,7 @@ class GameEngine {
   /// and the water-to-coast step counts toward the normal movement radius.
   /// This removes the old three-tile landing cap without allowing an unlimited
   /// bridgehead chain to crawl inland.
-  Map<int, int> _navalLandingDistances(WaterCell cell) {
+  Map<int, int> _navalLandingDistances(WaterCell cell, GameUnit unit) {
     final distances = <int, int>{};
     final queue = <int>[];
     for (final index in cell.coastTiles) {
@@ -3136,7 +3179,7 @@ class GameEngine {
     for (var cursor = 0; cursor < queue.length; cursor++) {
       final index = queue[cursor];
       final distance = distances[index]!;
-      if (distance >= mod.rules.unitMoveLimit ||
+      if (distance >= unitMovement(unit) ||
           !_canTraverseLand(state.turn, state.hexes[index])) {
         continue;
       }
@@ -3270,7 +3313,12 @@ class GameEngine {
       if (tile.owner == player) {
         tile
           ..owner = -1
+          ..buildingTypeId = null
           ..coalitionClaim = null;
+        changed = true;
+      }
+      if (tile.airUnit?.owner == player) {
+        tile.airUnit = null;
         changed = true;
       }
       if (unit != null &&
@@ -3346,6 +3394,7 @@ class GameEngine {
 
   void endTurn() {
     if (state.winner != null) return;
+    normalizeModAssets();
     _materializeOrphanedNavalCapitals();
     lastArtilleryStrikes.clear();
     final current = state.turn;
@@ -3380,6 +3429,7 @@ class GameEngine {
     state.turn = next;
     _preparePlayerTurn(next);
     for (final tile in state.hexes) {
+      if (tile.airUnit?.owner == next) tile.airUnit!.ready = true;
       if (tile.unit != null && unitOwnerAt(tile.index) == next) {
         tile.unit!.ready = true;
       }
@@ -3536,6 +3586,16 @@ class GameEngine {
 
   void _resolveBankruptcy(Province province) {
     if (province.money >= 0) return;
+    for (final tile in state.hexes) {
+      if (tile.airUnit?.owner == province.owner &&
+          tile.airUnit?.homeProvinceId == province.id) {
+        tile.airUnit = null;
+      }
+      if (province.tiles.contains(tile.index) &&
+          (modBuildingAt(tile.index)?.upkeep ?? 0) > 0) {
+        tile.buildingTypeId = null;
+      }
+    }
     final units =
         state.hexes
             .where(
@@ -3653,6 +3713,7 @@ class GameEngine {
     for (final target in state.hexes) {
       if (!target.active ||
           target.coalitionClaim != null ||
+          target.buildingTypeId != null ||
           target.object != TileObject.none ||
           target.unit != null) {
         continue;
@@ -3982,6 +4043,7 @@ class GameEngine {
           entry.key: rebuilt[entry.value].id,
     };
     state.provinces = rebuilt;
+    normalizeModAssets(successors: successorIdByOld);
     for (final displaced in displacedCapitalUnits) {
       _repatriatePeaceConferenceUnit(displaced.source, displaced.unit);
     }
@@ -4348,6 +4410,7 @@ class GameEngine {
   }
 
   int _capitalReplacementPriority(HexTile tile) {
+    if (tile.buildingTypeId != null) return 25;
     if (tile.object == TileObject.none && tile.unit == null) return 0;
     if (tile.unit != null) return 10 + tile.unit!.strength;
     return switch (tile.object) {
@@ -4376,6 +4439,7 @@ class GameEngine {
 
   void _updateWinner({bool commit = false}) {
     _settleCampaignsWithDefeatedSide();
+    normalizeModAssets();
     // A former owner may legally regain land when a conference resolves or
     // times out. Declaring a winner first would freeze endTurn and make that
     // restoration unreachable.

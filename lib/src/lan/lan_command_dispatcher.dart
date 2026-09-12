@@ -19,6 +19,9 @@ class LanCommandDispatcher {
       await controller.runAsNetworkPlayer(player, () async {
         final args = command.arguments;
         switch (command.action) {
+          case 'tapModTile':
+            controller.tapModTile(_requiredIndex(args, 'index'));
+            break;
           case 'tapTile':
             controller.tapTile(_requiredIndex(args, 'index'));
             break;

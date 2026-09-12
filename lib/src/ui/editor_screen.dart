@@ -1,5 +1,7 @@
 import '../l10n/game_locale.dart';
 import 'dala_theme.dart';
+import 'mod_build_menu.dart';
+import 'mod_piece.dart';
 import 'organic_cells.dart';
 import 'dart:async';
 import 'dart:math' as math;
@@ -29,7 +31,7 @@ const _editorOrange = DalaTheme.gold;
 const _editorBlue = DalaTheme.blue;
 const _editorOlive = DalaTheme.gold;
 
-enum _EditorTool { terrain, owner, object, unit, navy }
+enum _EditorTool { terrain, owner, object, unit, navy, custom }
 
 enum _EditorNavalAsset { none, boat1, boat2, seaMint, seaFort }
 
@@ -72,6 +74,7 @@ class _EditorScreenState extends State<EditorScreen> {
   int _stateRevision = 0;
   int _persistedRevision = -1;
   _EditorTool _tool = _EditorTool.owner;
+  String? _customType;
   TileObject _object = TileObject.town;
   _EditorNavalAsset _navalAsset = _EditorNavalAsset.boat1;
   int _owner = 0;
@@ -98,7 +101,10 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   Future<void> _loadSprites() async {
-    final sprites = await ClassicSprites.load();
+    final sprites = await ClassicSprites.load(
+      teamColors: widget.mod.palette,
+      overrides: widget.mod.sprites,
+    );
     if (!mounted) {
       sprites.dispose();
       return;
@@ -320,6 +326,54 @@ class _EditorScreenState extends State<EditorScreen> {
           changed = true;
           break;
         case _EditorTool.navy:
+          break;
+        case _EditorTool.custom:
+          final id = _customType;
+          if (id == null) return;
+          final building = widget.mod.buildings[id];
+          final type = widget.mod.units[id];
+          final engine = GameEngine(mod: widget.mod, state: state);
+          final province = type?.movement == ModMovement.air
+              ? engine.provincesOf(_owner).firstOrNull
+              : engine.provinceAt(index);
+          if (province == null) {
+            _status = 'Алдымен кемінде екі көршілес жерді бір түске бояңыз';
+            return;
+          }
+          if (type?.movement == ModMovement.air) {
+            tile.airUnit = tile.airUnit?.typeId == id
+                ? null
+                : GameUnit(
+                    strength: type!.strength,
+                    owner: _owner,
+                    homeProvinceId: province.id,
+                    typeId: id,
+                  );
+          } else if (building != null && tile.buildingTypeId == id) {
+            tile.buildingTypeId = null;
+          } else if (type != null && tile.unit?.typeId == id) {
+            tile.unit = null;
+          } else {
+            if (!tile.active ||
+                province.capital == index ||
+                tile.object != TileObject.none ||
+                tile.unit != null ||
+                tile.buildingTypeId != null) {
+              _status = 'Ақша аз немесе орын бос емес';
+              return;
+            }
+            if (building != null) {
+              tile.buildingTypeId = id;
+            } else {
+              tile.unit = GameUnit(
+                strength: type!.strength,
+                owner: province.owner,
+                homeProvinceId: province.id,
+                typeId: id,
+              );
+            }
+          }
+          changed = true;
           break;
       }
       if (changed) _status = 'Өзгеріс сақталуда…';
@@ -788,6 +842,7 @@ class _EditorScreenState extends State<EditorScreen> {
                         semanticsLabel: 'Редактор дайындалуда',
                       )
                     : _EditorBoard(
+                        mod: widget.mod,
                         state: state,
                         palette: palette,
                         sprites: _sprites,
@@ -798,6 +853,17 @@ class _EditorScreenState extends State<EditorScreen> {
               ),
               if (state != null)
                 _EditorToolbar(
+                  mod: widget.mod,
+                  customType: _customType,
+                  onChooseCustom: () async {
+                    final id = await showModTypeMenu(context, widget.mod);
+                    if (id != null && mounted) {
+                      setState(() {
+                        _customType = id;
+                        _tool = _EditorTool.custom;
+                      });
+                    }
+                  },
                   tool: _tool,
                   owner: _owner,
                   ownerCount: state.config.playerCount,
@@ -1034,6 +1100,9 @@ class _EditorButtonSurface extends StatelessWidget {
 
 class _EditorToolbar extends StatelessWidget {
   const _EditorToolbar({
+    required this.mod,
+    required this.customType,
+    required this.onChooseCustom,
     required this.tool,
     required this.owner,
     required this.ownerCount,
@@ -1050,6 +1119,9 @@ class _EditorToolbar extends StatelessWidget {
   });
 
   final _EditorTool tool;
+  final GameMod mod;
+  final String? customType;
+  final VoidCallback onChooseCustom;
   final int owner;
   final int ownerCount;
   final List<Color> palette;
@@ -1112,6 +1184,13 @@ class _EditorToolbar extends StatelessWidget {
                         selected: tool == _EditorTool.navy,
                         onTap: () => onToolChanged(_EditorTool.navy),
                       ),
+                      if (mod.buildings.isNotEmpty || mod.units.isNotEmpty)
+                        _ToolButton(
+                          label: 'Модтар',
+                          icon: Icons.extension,
+                          selected: tool == _EditorTool.custom,
+                          onTap: onChooseCustom,
+                        ),
                     ],
                   ),
                 ),
@@ -1122,6 +1201,25 @@ class _EditorToolbar extends StatelessWidget {
           SizedBox(
             height: 42,
             child: switch (tool) {
+              _EditorTool.custom => InkWell(
+                onTap: onChooseCustom,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (customType != null)
+                      ModPieceIcon(mod: mod, id: customType!),
+                    Flexible(
+                      child: Text(
+                        mod.buildings[customType]?.name ??
+                            mod.units[customType]?.name ??
+                            '',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Icon(Icons.expand_more),
+                  ],
+                ),
+              ),
               _EditorTool.terrain => const Center(
                 child: GameText(
                   'Ұяшықты басыңыз: жер ↔ су',
@@ -1441,6 +1539,7 @@ class _ToolButton extends StatelessWidget {
 
 class _EditorBoard extends StatefulWidget {
   const _EditorBoard({
+    required this.mod,
     required this.state,
     required this.palette,
     required this.sprites,
@@ -1453,6 +1552,7 @@ class _EditorBoard extends StatefulWidget {
   static const padding = OrganicCells.padding;
 
   final GameState state;
+  final GameMod mod;
   final List<Color> palette;
   final ClassicSprites? sprites;
   final int? selectedTile;
@@ -1546,6 +1646,7 @@ class _EditorBoardState extends State<_EditorBoard> {
               key: const ValueKey('editor-board'),
               size: size,
               painter: _EditorBoardPainter(
+                mod: widget.mod,
                 state: widget.state,
                 palette: widget.palette,
                 sprites: widget.sprites,
@@ -1579,6 +1680,7 @@ class _EditorBoardState extends State<_EditorBoard> {
 
 class _EditorBoardPainter extends CustomPainter {
   const _EditorBoardPainter({
+    required this.mod,
     required this.state,
     required this.palette,
     required this.sprites,
@@ -1586,6 +1688,7 @@ class _EditorBoardPainter extends CustomPainter {
   });
 
   final GameState state;
+  final GameMod mod;
   final List<Color> palette;
   final ClassicSprites? sprites;
   final int? selectedTile;
@@ -1616,6 +1719,19 @@ class _EditorBoardPainter extends CustomPainter {
       _drawObject(canvas, center, tile);
       final unit = tile.unit;
       if (unit != null) {
+        final custom = mod.units[unit.typeId];
+        if (custom != null) {
+          paintModPiece(
+            canvas,
+            center,
+            43,
+            custom.id,
+            custom.icon,
+            _paletteColor(palette, unit.owner),
+            sprites,
+          );
+          continue;
+        }
         final level = math.min(4, math.max(1, unit.strength));
         _drawImage(
           canvas,
@@ -1672,9 +1788,36 @@ class _EditorBoardPainter extends CustomPainter {
         }
       }
     }
+    for (final tile in state.hexes) {
+      final unit = tile.airUnit;
+      final type = mod.units[unit?.typeId];
+      if (!tile.inWorld || unit == null || type == null) continue;
+      paintModPiece(
+        canvas,
+        _EditorBoard._center(tile).translate(7, -10),
+        43,
+        type.id,
+        type.icon,
+        _paletteColor(palette, unit.owner),
+        sprites,
+      );
+    }
   }
 
   void _drawObject(Canvas canvas, Offset center, HexTile tile) {
+    final custom = mod.buildings[tile.buildingTypeId];
+    if (custom != null) {
+      paintModPiece(
+        canvas,
+        center,
+        46,
+        custom.id,
+        custom.icon,
+        _paletteColor(palette, tile.owner),
+        sprites,
+      );
+      return;
+    }
     final spriteName = _objectSpriteName(tile.object);
     if (spriteName == null) return;
     _drawImage(canvas, sprites![spriteName], center, const Size(46, 46));

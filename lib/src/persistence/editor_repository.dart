@@ -138,7 +138,13 @@ class EditorRepository {
     bool validWaterIndex(int index) =>
         index >= 0 && index < state.waterCells.length;
     bool validOwner(int owner) => owner >= 0 && owner < players;
+    bool validTypeId(String? id) =>
+        id == null ||
+        RegExp(
+          r'^[a-z0-9][a-z0-9_-]{0,63}\.[a-z0-9][a-z0-9_-]{0,31}$',
+        ).hasMatch(id);
     bool validUnit(GameUnit unit) =>
+        validTypeId(unit.typeId) &&
         unit.strength >= 1 &&
         unit.strength <= 4 &&
         unit.owner >= -1 &&
@@ -339,6 +345,18 @@ class EditorRepository {
           (!tile.active && tile.owner != -1) ||
           tile.owner < -1 ||
           tile.owner >= players ||
+          !validTypeId(tile.buildingTypeId) ||
+          (tile.buildingTypeId != null &&
+              (!tile.active ||
+                  tile.owner < 0 ||
+                  tile.object != TileObject.none ||
+                  tile.unit != null ||
+                  tile.coalitionClaim != null)) ||
+          (tile.airUnit != null &&
+              (!tile.inWorld ||
+                  !validUnit(tile.airUnit!) ||
+                  tile.airUnit!.typeId == null ||
+                  !validOwner(tile.airUnit!.owner))) ||
           tile.artilleryAmmo < 0 ||
           tile.artilleryCooldown < 0 ||
           (level == 0 &&
@@ -528,7 +546,9 @@ class EditorRepository {
     for (final tile in state.hexes) {
       final province = provinceByTile[tile.index];
       if ((tile.unit != null && !validUnitOrigin(tile.unit!)) ||
+          (tile.airUnit != null && !validUnitOrigin(tile.airUnit!)) ||
           (((tile.unit != null && tile.coalitionClaim == null) ||
+                  tile.buildingTypeId != null ||
                   ownerDependentObject(tile.object)) &&
               (province == null || province.owner != tile.owner))) {
         return false;
@@ -799,6 +819,7 @@ class EditorRepository {
           unit['ready'] is bool &&
           optionalType<int>(unit, 'owner') &&
           optionalType<int>(unit, 'homeProvinceId') &&
+          optionalType<String>(unit, 'typeId') &&
           (!unit.containsKey('transitAllies') ||
               isIntList(unit['transitAllies']));
     }
@@ -981,6 +1002,8 @@ class EditorRepository {
           !optionalType<int>(tile, 'treeBorn') ||
           !optionalType<int>(tile, 'artilleryCooldown') ||
           !optionalType<int>(tile, 'artilleryAmmo') ||
+          !optionalType<String>(tile, 'buildingTypeId') ||
+          (tile['airUnit'] != null && !validUnitJson(tile['airUnit'])) ||
           (tile['coalitionClaim'] != null &&
               !validCoalitionClaimJson(
                 tile['coalitionClaim'],

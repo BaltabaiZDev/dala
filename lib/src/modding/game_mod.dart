@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 import 'package:crypto/crypto.dart';
+import 'mod_types.dart';
+export 'mod_types.dart';
 
 class ModReference {
   const ModReference({
@@ -331,6 +333,8 @@ class GameMod {
     this.author = '',
     this.description = '',
     this.components = const [],
+    this.buildings = const {},
+    this.units = const {},
   });
 
   final String id;
@@ -345,6 +349,8 @@ class GameMod {
   final String author;
   final String description;
   final List<ModReference> components;
+  final Map<String, ModBuilding> buildings;
+  final Map<String, ModUnitType> units;
   ModReference get reference =>
       ModReference(id: id, name: name, version: version, hash: fingerprint);
   List<ModReference> get requirements => components.isNotEmpty
@@ -381,6 +387,9 @@ class GameMod {
     if (description.isNotEmpty) 'description': description,
     if (components.isNotEmpty)
       'components': components.map((m) => m.toJson()).toList(),
+    if (buildings.isNotEmpty)
+      'buildings': buildings.values.map((v) => v.toJson()).toList(),
+    if (units.isNotEmpty) 'units': units.values.map((v) => v.toJson()).toList(),
   };
 
   static Future<GameMod> loadDefault() =>
@@ -430,14 +439,47 @@ class GameMod {
         id.length > 64) {
       throw const FormatException('Мод атауы немесе палитрасы тым үлкен.');
     }
+    final buildings = readModTypes(
+      json['buildings'],
+      ModBuilding.fromJson,
+      (v) => v.id,
+    );
+    final units = readModTypes(
+      json['units'],
+      ModUnitType.fromJson,
+      (v) => v.id,
+    );
+    final components = ModReference.readList(json['components']);
+    final namespaces = components.isEmpty
+        ? {id}
+        : components.map((v) => v.id).toSet();
+    final typeIds = {...buildings.keys, ...units.keys};
+    if (typeIds.length != buildings.length + units.length ||
+        typeIds.any((key) => typeIds.contains('${key}_team')) ||
+        typeIds.any((key) => !namespaces.contains(key.split('.').first))) {
+      throw const FormatException('Mod type ids must belong to their package.');
+    }
+    for (final unit in units.values) {
+      if (unit.requiresBuilding != null &&
+          !buildings.containsKey(unit.requiresBuilding)) {
+        throw FormatException(
+          'Missing production building: ${unit.requiresBuilding}',
+        );
+      }
+    }
+    final allowedSprites = {
+      ...spriteNames,
+      ...typeIds,
+      ...typeIds.map((id) => '${id}_team'),
+    };
     final sprites = <String, String>{};
     final rawSprites = json['sprites'] ?? const <String, String>{};
-    if (rawSprites is! Map || rawSprites.length > spriteNames.length) {
+    if (rawSprites is! Map || rawSprites.length > allowedSprites.length) {
       throw const FormatException('Мод суреттері жарамсыз.');
     }
     var spriteBytes = 0;
     for (final entry in rawSprites.entries) {
-      if (!spriteNames.contains(entry.key) ||
+      if (!allowedSprites.contains(entry.key) ||
           entry.value is! String ||
           (entry.value as String).length > 700000) {
         throw const FormatException('Сурет атауы не көлемі жарамсыз.');
@@ -480,7 +522,9 @@ class GameMod {
       sprites: Map.unmodifiable(sprites),
       author: text('author', 80),
       description: text('description', 1000),
-      components: ModReference.readList(json['components']),
+      components: components,
+      buildings: buildings,
+      units: units,
     );
     _fingerprints[mod] = mod.fingerprint;
     return mod;

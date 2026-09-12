@@ -279,6 +279,7 @@ class GameUnit {
     this.ready = true,
     this.owner = -1,
     this.homeProvinceId = -1,
+    this.typeId,
     List<int>? transitAllies,
   }) : transitAllies = transitAllies ?? <int>[];
 
@@ -286,6 +287,7 @@ class GameUnit {
   bool ready;
   int owner;
   int homeProvinceId;
+  final String? typeId;
   final List<int> transitAllies;
 
   Map<String, dynamic> toJson() => {
@@ -293,6 +295,7 @@ class GameUnit {
     'ready': ready,
     'owner': owner,
     'homeProvinceId': homeProvinceId,
+    if (typeId != null) 'typeId': typeId,
     'transitAllies': transitAllies,
   };
 
@@ -301,6 +304,7 @@ class GameUnit {
     ready: json['ready'] as bool,
     owner: (json['owner'] as num?)?.toInt() ?? -1,
     homeProvinceId: (json['homeProvinceId'] as num?)?.toInt() ?? -1,
+    typeId: json['typeId'] as String?,
     transitAllies: (json['transitAllies'] as List? ?? const <Object>[])
         .map((value) => (value as num).toInt())
         .toList(),
@@ -523,14 +527,17 @@ class HexTile {
     this.active = false,
     this.inWorld = true,
     this.owner = -1,
-    this.object = TileObject.none,
+    TileObject object = TileObject.none,
+    this.buildingTypeId,
+    this.airUnit,
     this.unit,
     this.treeBorn = -1,
     this.artilleryCooldown = 0,
     this.artilleryAmmo = 0,
     this.coalitionClaim,
     List<int>? neighbors,
-  }) : neighbors = neighbors ?? [];
+  }) : _object = object,
+       neighbors = neighbors ?? [];
 
   final int index;
   final int q;
@@ -538,7 +545,17 @@ class HexTile {
   bool active;
   bool inWorld;
   int owner;
-  TileObject object;
+  TileObject _object;
+  TileObject get object => _object;
+  set object(TileObject value) {
+    _object = value;
+    // Existing captures, clearing, capital creation and editor painting all
+    // replace the land object through this setter.
+    buildingTypeId = null;
+  }
+
+  String? buildingTypeId;
+  GameUnit? airUnit;
   GameUnit? unit;
   int treeBorn;
   int artilleryCooldown;
@@ -556,6 +573,8 @@ class HexTile {
     'inWorld': inWorld,
     'owner': owner,
     'object': object.name,
+    if (buildingTypeId != null) 'buildingTypeId': buildingTypeId,
+    if (airUnit != null) 'airUnit': airUnit!.toJson(),
     'unit': unit?.toJson(),
     'treeBorn': treeBorn,
     'artilleryCooldown': artilleryCooldown,
@@ -572,6 +591,10 @@ class HexTile {
     inWorld: json['inWorld'] as bool? ?? true,
     owner: json['owner'] as int,
     object: TileObject.values.byName(json['object'] as String),
+    buildingTypeId: json['buildingTypeId'] as String?,
+    airUnit: json['airUnit'] == null
+        ? null
+        : GameUnit.fromJson(Map<String, dynamic>.from(json['airUnit'] as Map)),
     unit: json['unit'] == null
         ? null
         : GameUnit.fromJson(json['unit'] as Map<String, dynamic>),

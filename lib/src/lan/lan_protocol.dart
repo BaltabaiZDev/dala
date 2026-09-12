@@ -2,8 +2,8 @@ export 'lan_address.dart' show lanDefaultPort;
 import '../game/models.dart';
 import '../modding/game_mod.dart';
 
-// Isolated-cell conquest and treaty evacuation must agree on every device.
-const int lanProtocolVersion = 7;
+// Declarative buildings/units and aircraft commands must agree on all devices.
+const int lanProtocolVersion = 8;
 
 const int lanMaxPlayerNameLength = 20;
 const int lanMaxMessageLength = 512;
@@ -191,6 +191,8 @@ class LanUiState {
     this.selectedTile,
     this.selectedWaterCell,
     this.selectedCargoIndex,
+    this.selectedModTypeId,
+    this.selectedAirTile,
     this.toolIndex = 0,
     this.hint = '',
     this.defenseTiles = const <int>[],
@@ -203,6 +205,8 @@ class LanUiState {
   final int? selectedTile;
   final int? selectedWaterCell;
   final int? selectedCargoIndex;
+  final String? selectedModTypeId;
+  final int? selectedAirTile;
   final int toolIndex;
   final String hint;
   final List<int> defenseTiles;
@@ -215,6 +219,8 @@ class LanUiState {
     'selectedTile': selectedTile,
     'selectedWaterCell': selectedWaterCell,
     'selectedCargoIndex': selectedCargoIndex,
+    if (selectedModTypeId != null) 'selectedModTypeId': selectedModTypeId,
+    if (selectedAirTile != null) 'selectedAirTile': selectedAirTile,
     'toolIndex': toolIndex,
     'hint': hint,
     'defenseTiles': defenseTiles,
@@ -228,6 +234,8 @@ class LanUiState {
     selectedTile: (json['selectedTile'] as num?)?.toInt(),
     selectedWaterCell: (json['selectedWaterCell'] as num?)?.toInt(),
     selectedCargoIndex: (json['selectedCargoIndex'] as num?)?.toInt(),
+    selectedModTypeId: json['selectedModTypeId'] as String?,
+    selectedAirTile: (json['selectedAirTile'] as num?)?.toInt(),
     toolIndex: (json['toolIndex'] as num?)?.toInt() ?? 0,
     hint: (json['hint'] as String? ?? '').substring(
       0,

@@ -54,6 +54,11 @@ class DiplomacyAiSnapshot {
     }
     for (final tile in state.hexes) {
       visitedCells++;
+      final air = tile.airUnit;
+      if (air != null && air.owner >= 0 && air.owner < n) {
+        upkeep[air.owner] += engine.unitMaintenance(air);
+        power[air.owner] += air.strength * air.strength * 3;
+      }
       if (!tile.active) continue;
       final owner = tile.owner;
       if (owner >= 0 && owner < n) {
@@ -91,13 +96,19 @@ class DiplomacyAiSnapshot {
             _ => 0,
           };
           upkeep[owner] += buildingUpkeep;
+          final custom = engine.modBuildingAt(tile.index);
+          income[owner] += custom?.income ?? 0;
+          upkeep[owner] += custom?.upkeep ?? 0;
+          power[owner] += (custom?.defense ?? 0) * 3;
           landNet[tile.index] =
               1 -
               (tile.hasTree ? 1 : 0) +
               (tile.object == TileObject.farm && !state.config.slayRules
                   ? rules.farmIncome
                   : 0) -
-              buildingUpkeep;
+              buildingUpkeep +
+              (custom?.income ?? 0) -
+              (custom?.upkeep ?? 0);
           if (tile.object == TileObject.tower) power[owner] += 4;
           if (tile.object == TileObject.strongTower) power[owner] += 8;
         }
@@ -106,7 +117,7 @@ class DiplomacyAiSnapshot {
       if (unit != null) {
         final sovereign = engine.unitOwnerAt(tile.index);
         if (sovereign >= 0 && sovereign < n) {
-          final cost = engine.unitUpkeepAtStrength(unit.strength);
+          final cost = engine.unitMaintenance(unit);
           upkeep[sovereign] += cost;
           if (sovereign == owner) landNet[tile.index] -= cost;
           power[sovereign] += unit.strength * unit.strength * 4;
@@ -125,13 +136,13 @@ class DiplomacyAiSnapshot {
             ? rules.boat1Upkeep
             : rules.boat2Upkeep;
         for (final unit in boat.cargo) {
-          transferCost += engine.unitUpkeepAtStrength(unit.strength) * 3 ~/ 2;
+          transferCost += engine.unitMaintenance(unit) * 3 ~/ 2;
         }
         navalNet[NavalAssetRef(kind: NavalAssetKind.boat, id: boat.id)] =
             -transferCost;
         power[owner] += boat.level * 8;
         for (final unit in boat.cargo) {
-          upkeep[owner] += engine.unitUpkeepAtStrength(unit.strength) * 3 ~/ 2;
+          upkeep[owner] += engine.unitMaintenance(unit) * 3 ~/ 2;
           power[owner] += unit.strength * unit.strength * 2;
         }
       }

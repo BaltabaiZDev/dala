@@ -14,6 +14,7 @@ import 'diplomacy_badge.dart';
 import 'map_raster_cache.dart';
 import 'map_viewport.dart';
 import 'organic_cells.dart';
+import 'mod_piece.dart';
 
 void _drawDefenseShield(
   Canvas canvas,
@@ -377,7 +378,9 @@ class _HexBoardState extends State<HexBoard>
     );
     final objectRenderSignature = Object.hash(
       terrainSignature,
-      Object.hashAll(state.hexes.map((t) => t.object)),
+      Object.hashAll(
+        state.hexes.map((t) => Object.hash(t.object, t.buildingTypeId)),
+      ),
       widget.controller.artilleryAnimationSerial,
     );
     final unitRenderSignature = _unitRenderSignature(
@@ -418,7 +421,8 @@ class _HexBoardState extends State<HexBoard>
       mod: widget.controller.mod,
       fogActive: widget.controller.fogActive,
       sprites: _sprites,
-      selected: widget.controller.selectedTile,
+      selected:
+          widget.controller.selectedAirTile ?? widget.controller.selectedTile,
       selectedWater: widget.controller.selectedWaterCell,
       selectionOpacity: widget.controller.selectionOpacity,
       moveTargets: targets,
@@ -555,6 +559,7 @@ class _HexBoardState extends State<HexBoard>
                                 state,
                               );
                               if (index == null) return;
+                              if (widget.controller.tapModTile(index)) return;
                               if (state.hexes[index].active) {
                                 final diplomacyPlayer = widget.controller
                                     .diplomacyPlayerForTile(index);
@@ -584,6 +589,11 @@ class _HexBoardState extends State<HexBoard>
                                 state,
                               );
                               if (index == null) return;
+                              if (state.hexes[index].airUnit != null ||
+                                  widget.controller.selectedAirTile != null ||
+                                  widget.controller.selectedModTypeId != null) {
+                                return;
+                              }
                               if (state.hexes[index].active) {
                                 widget.controller.longPressTile(index);
                               } else {
@@ -760,13 +770,16 @@ class _HexBoardState extends State<HexBoard>
                               terrainSignature,
                               Object.hashAllUnordered(targets),
                               Object.hashAllUnordered(waterTargets),
-                              widget.controller.selectedTile,
+                              widget.controller.selectedAirTile ??
+                                  widget.controller.selectedTile,
                               widget.controller.selectedWaterCell,
                             ),
                             state: state,
                             targets: targets,
                             waterTargets: waterTargets,
-                            selected: widget.controller.selectedTile,
+                            selected:
+                                widget.controller.selectedAirTile ??
+                                widget.controller.selectedTile,
                             selectedWater: widget.controller.selectedWaterCell,
                           ),
                         ),
@@ -1000,6 +1013,9 @@ class _HexBoardState extends State<HexBoard>
           // sentinel before hashing or player zero's captures stay invisible.
           tile.owner + 1,
           terrainOnly && state.hexes.length >= 1200 ? null : tile.object,
+          terrainOnly && state.hexes.length >= 1200
+              ? null
+              : tile.buildingTypeId,
           claim?.captor,
           claim == null ? 0 : Object.hashAll(claim.members),
           claim == null ? 0 : Object.hashAll(claim.contributors),
@@ -1014,7 +1030,9 @@ class _HexBoardState extends State<HexBoard>
     widget.controller.fogActive,
     Object.hashAllUnordered(visibleTiles),
     Object.hashAllUnordered(visibleWaterCells),
-    terrainOnly ? null : widget.controller.selectedTile,
+    terrainOnly
+        ? null
+        : widget.controller.selectedAirTile ?? widget.controller.selectedTile,
     terrainOnly ? null : widget.controller.selectedWaterCell,
     terrainOnly ? null : (widget.controller.selectionOpacity * 1000).round(),
     terrainOnly ? null : Object.hashAllUnordered(targets),
@@ -1055,8 +1073,20 @@ class _HexBoardState extends State<HexBoard>
                 unit.strength,
                 unit.owner + 1,
                 unit.ready,
+                unit.typeId,
               );
       }),
+    ),
+    Object.hashAll(
+      state.hexes.map(
+        (tile) => Object.hash(
+          tile.index,
+          tile.airUnit?.typeId,
+          tile.airUnit?.owner,
+          tile.airUnit?.ready,
+          tile.airUnit?.strength,
+        ),
+      ),
     ),
     Object.hashAll(
       state.waterCells.map((cell) {
@@ -1119,7 +1149,7 @@ class HexStaticObjectPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     for (final tile in source.tilesWithin(viewBounds)) {
       if (!tile.active ||
-          tile.object == TileObject.none ||
+          (tile.object == TileObject.none && tile.buildingTypeId == null) ||
           !source.visibleTiles.contains(tile.index)) {
         continue;
       }
@@ -1204,6 +1234,7 @@ class HexActionMaskPainter extends CustomPainter {
         continue;
       }
       for (final tileIndex in cell.tiles) {
+        if (tileIndex == selected || targets.contains(tileIndex)) continue;
         if (bounds != null &&
             !bounds.contains(HexBoard.centerOf(state.hexes[tileIndex]))) {
           continue;
@@ -1281,6 +1312,7 @@ class HexTerrainCache extends MapRasterCache {
         tile.active,
         tile.owner + 1,
         state.hexes.length >= 1200 ? null : tile.object,
+        state.hexes.length >= 1200 ? null : tile.buildingTypeId,
         painter.fogActive,
         visible,
         claim?.captor,
@@ -1452,8 +1484,7 @@ class HexBoardPainter extends CustomPainter {
     if (selected != null &&
         selected! >= 0 &&
         selected! < state.hexes.length &&
-        state.hexes[selected!].active &&
-        visibleTiles.contains(selected)) {
+        _terrainTileVisible(selected!, _waterByTile)) {
       _drawSelection(canvas, HexBoard.centerOf(state.hexes[selected!]));
     }
   }
@@ -1503,13 +1534,13 @@ class HexBoardPainter extends CustomPainter {
 
   void _drawHighlights(Canvas canvas) {
     for (final index in moveTargets) {
-      if (!visibleTiles.contains(index) ||
-          index < 0 ||
-          index >= state.hexes.length) {
+      if (index < 0 || index >= state.hexes.length) {
         continue;
       }
       final tile = state.hexes[index];
-      if (!tile.active || !_inRecordBounds(tile)) continue;
+      if (!_terrainTileVisible(index, _waterByTile) || !_inRecordBounds(tile)) {
+        continue;
+      }
       final center = HexBoard.centerOf(tile);
       _drawMoveTarget(canvas, center);
       if ((terrainCache == null || state.hexes.length < 1200) &&
@@ -1792,6 +1823,21 @@ class HexBoardPainter extends CustomPainter {
   }
 
   void _drawObject(Canvas canvas, Offset center, HexTile tile) {
+    final custom = mod.buildings[tile.buildingTypeId];
+    if (custom != null) {
+      paintModPiece(
+        canvas,
+        center,
+        47,
+        custom.id,
+        custom.icon,
+        tile.owner < 0
+            ? Colors.grey
+            : mod.palette[tile.owner % mod.palette.length],
+        sprites,
+      );
+      return;
+    }
     final artilleryLevel = switch (tile.object) {
       TileObject.artillery1 => 1,
       TileObject.artillery2 => 2,
@@ -2190,6 +2236,18 @@ class HexPieceFrame {
         for (final province in state.provinces)
           if (visibleTiles.contains(province.capital)) province,
       ] {
+    final waterTiles = {
+      for (final cell in state.waterCells)
+        if (visibleWater.contains(cell.index)) ...cell.tiles,
+    };
+    airUnits = [
+      for (final tile in state.hexes)
+        if (tile.airUnit != null &&
+            (tile.active
+                ? visibleTiles.contains(tile.index)
+                : waterTiles.contains(tile.index)))
+          tile,
+    ];
     movingUnits = units
         .where((tile) => HexUnitPainter.shouldBounceUnit(state, tile))
         .toList();
@@ -2203,6 +2261,7 @@ class HexPieceFrame {
   }
 
   final List<HexTile> units;
+  late final List<HexTile> airUnits;
   final List<WaterCell> water;
   final List<Province> provinces;
   late final List<HexTile> movingUnits;
@@ -2266,6 +2325,20 @@ class HexUnitPainter extends CustomPainter {
           ? 4 * jumpProgress * (1 - jumpProgress) * 5
           : 0.0;
       final center = HexBoard.centerOf(tile).translate(0, -jumpHeight);
+      final custom = mod.units[unit.typeId];
+      if (custom != null) {
+        paintModPiece(
+          canvas,
+          center,
+          46,
+          custom.id,
+          custom.icon,
+          mod.palette[(unit.owner < 0 ? tile.owner : unit.owner) %
+              mod.palette.length],
+          sprites,
+        );
+        continue;
+      }
       _drawImage(
         canvas,
         sprites!['man${unit.strength - 1}'],
@@ -2343,6 +2416,37 @@ class HexUnitPainter extends CustomPainter {
           textDirection: TextDirection.ltr,
         )..layout();
         painter.paint(canvas, center.translate(-painter.width / 2, 17));
+      }
+    }
+    if (pass != HexPiecePass.animated) {
+      final waterTiles = frame == null
+          ? {
+              for (final cell in state.waterCells)
+                if (visibleWaterCells.contains(cell.index)) ...cell.tiles,
+            }
+          : const <int>{};
+      for (final tile in frame?.airUnits ?? state.hexes) {
+        final unit = tile.airUnit;
+        final custom = mod.units[unit?.typeId];
+        if (unit == null ||
+            custom == null ||
+            (frame == null &&
+                !(tile.active
+                    ? visibleTiles.contains(tile.index)
+                    : waterTiles.contains(tile.index)))) {
+          continue;
+        }
+        final center = HexBoard.centerOf(tile).translate(7, -10);
+        if (!_inView(center)) continue;
+        paintModPiece(
+          canvas,
+          center,
+          43,
+          custom.id,
+          custom.icon,
+          mod.palette[unit.owner % mod.palette.length],
+          sprites,
+        );
       }
     }
     for (final province in frame?.provinces ?? state.provinces) {
