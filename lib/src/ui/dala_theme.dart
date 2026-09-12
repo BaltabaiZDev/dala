@@ -16,7 +16,7 @@ class DalaTheme {
   static ThemeData get light => ThemeData(
     useMaterial3: true,
     fontFamily: 'Dala Sans',
-    fontFamilyFallback: const ['Dala Math', 'Dala Symbols'],
+    fontFamilyFallback: const ['Dala Math', 'Dala Symbols', 'Dala Chinese'],
     colorScheme: ColorScheme.fromSeed(
       seedColor: const Color(0xff397c69),
       surface: paper,
@@ -28,7 +28,7 @@ class DalaTheme {
     scaffoldBackgroundColor: canvas,
     textTheme: ThemeData.light().textTheme.apply(
       fontFamily: 'Dala Sans',
-      fontFamilyFallback: const ['Dala Math', 'Dala Symbols'],
+      fontFamilyFallback: const ['Dala Math', 'Dala Symbols', 'Dala Chinese'],
       bodyColor: ink,
       displayColor: ink,
     ),

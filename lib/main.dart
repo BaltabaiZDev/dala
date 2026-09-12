@@ -54,7 +54,7 @@ class _AntiyoyAppState extends State<AntiyoyApp> {
           debugShowCheckedModeBanner: false,
           theme: DalaTheme.light,
           locale: language.locale,
-          supportedLocales: const [Locale('kk'), Locale('ru'), Locale('en')],
+          supportedLocales: GameLocale.supportedLocales,
           localizationsDelegates: GlobalMaterialLocalizations.delegates,
           builder: (context, child) => DalaViewport(child: child!),
           home: HomeScreen(gameMod: widget.gameMod, saves: widget.saves),

@@ -735,7 +735,14 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
                   style: const TextStyle(fontSize: 16),
                 ),
                 const SizedBox(height: 8),
-                if (proposal != null)
+                if (proposal?.type == DiplomacyProposalType.exchange)
+                  _LetterTerms(
+                    controller: controller,
+                    proposal: proposal!,
+                    concise: true,
+                  ),
+                if (proposal != null &&
+                    proposal.type != DiplomacyProposalType.exchange)
                   for (final term in _proposalTerms(controller, proposal))
                     Container(
                       margin: const EdgeInsets.only(bottom: 5),
@@ -746,7 +753,7 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
                         style: const TextStyle(fontSize: 13),
                       ),
                     )
-                else
+                else if (proposal == null)
                   GameText(
                     message!.text,
                     translate: false,
@@ -762,14 +769,32 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
                       receiver: term.fromSender ? proposal.to : proposal.from,
                       offer: term.offer,
                     ),
-                if (proposal != null && proposal.rationale.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: GameText(
-                      proposal.rationale,
-                      key: const ValueKey('diplomacy-letter-rationale'),
-                      style: const TextStyle(fontSize: 13, height: 1.2),
-                    ),
+                if (proposal != null)
+                  _DiplomacyDetails(
+                    key: const ValueKey('diplomacy-letter-details'),
+                    children: [
+                      if (proposal.type == DiplomacyProposalType.exchange)
+                        _LetterTerms(
+                          controller: controller,
+                          proposal: proposal,
+                          concise: false,
+                        )
+                      else
+                        for (final text in _proposalTerms(
+                          controller,
+                          proposal,
+                          concise: false,
+                        ))
+                          GameText(text, style: const TextStyle(fontSize: 13)),
+                      if (proposal.rationale.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        GameText(
+                          proposal.rationale,
+                          key: const ValueKey('diplomacy-letter-rationale'),
+                          style: const TextStyle(fontSize: 13, height: 1.2),
+                        ),
+                      ],
+                    ],
                   ),
               ],
             ),
@@ -1329,9 +1354,17 @@ class _DiplomacySheetState extends State<_DiplomacySheet> {
                   GameText(
                     removing
                         ? 'Белгі алынады. Қайта қоюға 10 ход күту керек.'
-                        : 'Оның сізбен және сіздің достарыңызбен достығы тоқтайды. Кейін екі жақ қарсы тараптың достарымен жаңа достық құра алмайды.\n\nОртақ қатынас: −35.\nБелсенді ортақ соғыс, жер бөлісу немесе қонақ әскер бар болса, одақ бұзылмайды.',
+                        : 'Қатынас −35. Өзара және достармен достық шектеледі.',
                     style: const TextStyle(fontSize: 15, height: 1.4),
                   ),
+                  if (!removing)
+                    const _DiplomacyDetails(
+                      children: [
+                        GameText(
+                          'Оның сізбен және сіздің достарыңызбен достығы тоқтайды. Кейін екі жақ қарсы тараптың достарымен жаңа достық құра алмайды.\n\nОртақ қатынас: −35.\nБелсенді ортақ соғыс, жер бөлісу немесе қонақ әскер бар болса, одақ бұзылмайды.',
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),
@@ -1418,6 +1451,79 @@ class _DiplomacySheetState extends State<_DiplomacySheet> {
       setState(() {});
     }
   }
+}
+
+/// Keep the decision visible; explanations open only when requested.
+class _DiplomacyDetails extends StatefulWidget {
+  const _DiplomacyDetails({required this.children, super.key});
+  final List<Widget> children;
+  @override
+  State<_DiplomacyDetails> createState() => _DiplomacyDetailsState();
+}
+
+class _DiplomacyDetailsState extends State<_DiplomacyDetails> {
+  bool _expanded = false;
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      TextButton.icon(
+        onPressed: () => setState(() => _expanded = !_expanded),
+        icon: Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 18),
+        label: GameText(_expanded ? 'Түсіндірмені жабу' : 'Толық түсіндірме'),
+      ),
+      if (_expanded) ...widget.children,
+    ],
+  );
+}
+
+class _LetterTerms extends StatelessWidget {
+  const _LetterTerms({
+    required this.controller,
+    required this.proposal,
+    required this.concise,
+  });
+  final GameController controller;
+  final DiplomacyProposal proposal;
+  final bool concise;
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (final term in proposal.effectiveTerms.where(
+        (t) => t.offer.type != DiplomacyExchangeType.nothing,
+      ))
+        Container(
+          margin: const EdgeInsets.only(bottom: 5),
+          padding: const EdgeInsets.all(8),
+          color: term.fromSender
+              ? const Color(0xffd7e7d3)
+              : const Color(0xffecd1c9),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GameText(
+                term.fromSender ? 'Сіз аласыз' : 'Сіз бересіз',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              GameText(
+                _offerSummary(
+                  controller,
+                  term.fromSender ? proposal.from : proposal.to,
+                  term.fromSender ? proposal.to : proposal.from,
+                  term.offer,
+                  concise: concise,
+                ),
+                style: const TextStyle(fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+    ],
+  );
 }
 
 class _ObligationChip extends StatelessWidget {
@@ -2000,10 +2106,22 @@ class _CountryInfoPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   GameText(
-                    'Боттар одағы: барлық жұпта кемінде +${engine.militaryAllianceTrustRequired(current, other)}. '
-                    'Одақ үлкейген сайын талап өседі; сенімнен бөлек стратегиялық пайда да қажет.',
+                    'Одаққа сенім: +${engine.militaryAllianceTrustRequired(current, other)} және ортақ пайда.',
                     style: const TextStyle(fontSize: 12),
                   ),
+                  _DiplomacyDetails(
+                    children: [
+                      GameText(
+                        'Боттар одағы: барлық жұпта кемінде +${engine.militaryAllianceTrustRequired(current, other)}. '
+                        'Одақ үлкейген сайын талап өседі; сенімнен бөлек стратегиялық пайда да қажет.',
+                      ),
+                    ],
+                  ),
+                  if (relation == DiplomacyStatus.coalition)
+                    const GameText(
+                      'Одақ біткенде әскер өз еліне қайтады. Орын жоқ болса: біріктіру, болмаса құнын қайтару.',
+                      style: TextStyle(fontSize: 12),
+                    ),
                   const _SectionLabel('Қарыздар мен төлемдер'),
                   if (overview.obligations.isEmpty)
                     const GameText(
@@ -2020,10 +2138,17 @@ class _CountryInfoPage extends StatelessWidget {
                         ),
                       ),
                     const GameText(
-                      '+ сізге · − сізден. Қарыз — қалған толық сома. '
-                      '/ход — келісімдегі төлем; нақты төлем табыс пен қазынаға байланысты. '
-                      'x — қалған ход саны.',
+                      '+ сізге · − сізден · /ход — төлем · x — қалған ход.',
                       style: TextStyle(fontSize: 12),
+                    ),
+                    const _DiplomacyDetails(
+                      children: [
+                        GameText(
+                          '+ сізге · − сізден. Қарыз — қалған толық сома. '
+                          '/ход — келісімдегі төлем; нақты төлем табыс пен қазынаға байланысты. '
+                          'x — қалған ход саны.',
+                        ),
+                      ],
                     ),
                   ],
                   const _SectionLabel('Соңғы себептер'),
@@ -2141,23 +2266,34 @@ String _proposalTitle(DiplomacyProposal proposal) => switch (proposal.type) {
 
 List<String> _proposalTerms(
   GameController controller,
-  DiplomacyProposal proposal,
-) => switch (proposal.type) {
+  DiplomacyProposal proposal, {
+  bool concise = true,
+}) => switch (proposal.type) {
   DiplomacyProposalType.friendship => [
-    '${controller.playerName(proposal.from)} және ${controller.playerName(proposal.to)} 12 ходқа дос болады',
+    if (concise)
+      'Достық · 12 ход'
+    else
+      '${controller.playerName(proposal.from)} және ${controller.playerName(proposal.to)} 12 ходқа дос болады',
   ],
   DiplomacyProposalType.militaryAlliance => [
-    '${controller.playerName(proposal.from)} және ${controller.playerName(proposal.to)} әскери одақ құрады',
+    if (concise)
+      'Әскери одақ'
+    else
+      '${controller.playerName(proposal.from)} және ${controller.playerName(proposal.to)} әскери одақ құрады',
   ],
   DiplomacyProposalType.peace => [
-    '${controller.playerName(proposal.from)} және ${controller.playerName(proposal.to)} соғысты тоқтатады',
-    'Қайта соғыс жариялауға 9 ходтық тыйым қойылады',
+    if (concise)
+      'Бітім · 9 ход соғыссыз'
+    else ...[
+      '${controller.playerName(proposal.from)} және ${controller.playerName(proposal.to)} соғысты тоқтатады',
+      'Қайта соғыс жариялауға 9 ходтық тыйым қойылады',
+    ],
   ],
   DiplomacyProposalType.exchange => [
     for (final term in proposal.effectiveTerms.where(
       (t) => t.offer.type != DiplomacyExchangeType.nothing,
     ))
-      '${controller.playerName(term.fromSender ? proposal.from : proposal.to)} → ${controller.playerName(term.fromSender ? proposal.to : proposal.from)}: ${_offerSummary(controller, term.fromSender ? proposal.from : proposal.to, term.fromSender ? proposal.to : proposal.from, term.offer)}',
+      '${controller.playerName(term.fromSender ? proposal.from : proposal.to)} → ${controller.playerName(term.fromSender ? proposal.to : proposal.from)}: ${_offerSummary(controller, term.fromSender ? proposal.from : proposal.to, term.fromSender ? proposal.to : proposal.from, term.offer, concise: concise)}',
   ],
 };
 
@@ -2207,8 +2343,9 @@ String _offerSummary(
   GameController controller,
   int giver,
   int receiver,
-  DiplomacyOffer offer,
-) {
+  DiplomacyOffer offer, {
+  bool concise = false,
+}) {
   switch (offer.type) {
     case DiplomacyExchangeType.nothing:
       return 'ештеңе';
@@ -2217,6 +2354,7 @@ String _offerSummary(
           .provincesOf(giver)
           .fold<int>(0, (sum, province) => sum + math.max(0, province.money));
       final debt = math.max(0, offer.amount - available);
+      if (concise && debt > 0) return '${offer.amount} ақша · Қарыз: $debt';
       return debt == 0
           ? '${offer.amount} ақша'
           : '${offer.amount} ақша (қазіргі қазынадан $available, қалған $debt — қарыз)';
@@ -2231,6 +2369,9 @@ String _offerSummary(
             (sum, reference) =>
                 sum + controller.engine.diplomacyNavalPrice(reference),
           );
+      if (concise) {
+        return '${offer.tiles.length} жер · ${offer.navalRefs.length} теңіз · Бағасы $value';
+      }
       return '${offer.tiles.length} жер, ${offer.navalRefs.length} теңіз '
           'активі (бағасы $value)';
     case DiplomacyExchangeType.friendship:
@@ -2240,6 +2381,7 @@ String _offerSummary(
     case DiplomacyExchangeType.warDeclaration:
       return '${controller.playerName(offer.targetPlayer)} ойыншысына соғыс жариялау';
     case DiplomacyExchangeType.ceasefire:
+      if (concise) return 'Бітім · 9 ход соғыссыз';
       return '${controller.playerName(receiver)} ойыншысымен соғысты тоқтату және 9 ходтық тыйым';
     case DiplomacyExchangeType.removeBlackMark:
       return '${controller.playerName(receiver)} ойыншысымен қара белгіні алу';
@@ -2248,6 +2390,9 @@ String _offerSummary(
         offer.amount,
         math.max(0, controller.engine.playerIncome(giver)),
       );
+      if (concise) {
+        return '${offer.amount}/ход × ${offer.duration} · Қазір ≤$effective/ход';
+      }
       return '${offer.amount} ақша × ${offer.duration} ход (кіріс шегімен қазір $effective/ход)';
   }
 }

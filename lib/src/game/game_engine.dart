@@ -1300,22 +1300,17 @@ class GameEngine {
     if (owner < 0 || owner >= state.config.playerCount || !_isAlive(owner)) {
       return;
     }
-    final distances = <int, int>{source: 0};
-    final queue = <int>[source];
-    var bestDistance = 1 << 30;
-    final candidates = <int>[];
-    for (var cursor = 0; cursor < queue.length; cursor++) {
-      final index = queue[cursor];
-      final distance = distances[index]!;
-      if (distance > bestDistance) break;
+    final origin = state.hexes[source];
+    final homes = provincesOf(owner).toList()
+      ..sort((a, b) => a.id.compareTo(b.id));
+    final homeTiles = {for (final province in homes) ...province.tiles};
+    final candidates = <HexTile>[];
+    for (final index in homeTiles) {
       final tile = state.hexes[index];
-      final friendly =
-          tile.coalitionClaim == null &&
-          tile.active &&
-          tile.owner >= 0 &&
-          (tile.owner == owner || hasMilitaryAccess(owner, tile.owner));
       final open =
-          tile.unit == null &&
+          tile.active &&
+          tile.owner == owner &&
+          tile.coalitionClaim == null &&
           tile.object != TileObject.town &&
           tile.object != TileObject.farm &&
           tile.object != TileObject.tower &&
@@ -1323,39 +1318,55 @@ class GameEngine {
           tile.object != TileObject.port1 &&
           tile.object != TileObject.port2 &&
           _artilleryLevel(tile.object) == 0;
-      if (friendly && open) {
-        bestDistance = distance;
-        candidates.add(index);
-        continue;
-      }
-      if (distance >= bestDistance) continue;
-      final neighbors = tile.neighbors.toList()..sort();
-      for (final neighbor in neighbors) {
-        if (neighbor < 0 ||
-            neighbor >= state.hexes.length ||
-            distances.containsKey(neighbor) ||
-            !state.hexes[neighbor].active) {
-          continue;
-        }
-        distances[neighbor] = distance + 1;
-        queue.add(neighbor);
+      if (open &&
+          (tile.unit == null ||
+              (unitOwnerAt(index) == owner &&
+                  tile.unit!.strength + unit.strength <= 4))) {
+        candidates.add(tile);
       }
     }
-    if (candidates.isEmpty) return;
+    // Treaty evacuation is not a combat move. Home may be across a sea; never
+    // strand troops behind an enemy border or pass them to a different ally.
+    int distance(HexTile tile) {
+      final q = tile.q - origin.q;
+      final r = tile.r - origin.r;
+      return q.abs() + r.abs() + (q + r).abs();
+    }
+
     candidates.sort((a, b) {
-      final ownA = state.hexes[a].owner == owner ? 0 : 1;
-      final ownB = state.hexes[b].owner == owner ? 0 : 1;
-      final ownOrder = ownA.compareTo(ownB);
-      return ownOrder != 0 ? ownOrder : a.compareTo(b);
+      final merging = (a.unit == null ? 0 : 1).compareTo(
+        b.unit == null ? 0 : 1,
+      );
+      if (merging != 0) return merging;
+      final nearest = distance(a).compareTo(distance(b));
+      return nearest != 0 ? nearest : a.index.compareTo(b.index);
     });
-    final destination = state.hexes[candidates.first];
-    if (destination.owner == owner) {
-      destination
-        ..object = TileObject.none
-        ..treeBorn = -1;
-      unit.transitAllies.clear();
+    if (candidates.isEmpty) {
+      // No troop or building is overwritten. Demobilisation returns exactly
+      // the unit's purchase value to its own treasury, never to its former host.
+      final treasury =
+          homes.where((p) => p.id == unit.homeProvinceId).firstOrNull ??
+          homes.first;
+      final refund = unit.strength * mod.rules.unitPricePerLevel;
+      treasury.money += refund;
+      _logDiplomacy(
+        '${state.playerName(owner)}: қайтқан әскерге орын жоқ; қазынаға $refund ақша қайтарылды',
+      );
+      return;
     }
-    destination.unit = unit..ready = false;
+    final destination = candidates.first;
+    destination
+      ..object = TileObject.none
+      ..treeBorn = -1;
+    unit.transitAllies.clear();
+    if (destination.unit == null) {
+      destination.unit = unit..ready = false;
+    } else {
+      destination.unit!
+        ..strength += unit.strength
+        ..ready = false
+        ..transitAllies.clear();
+    }
     _fundUnitOnOwnLand(destination);
   }
 
@@ -1972,9 +1983,26 @@ class GameEngine {
     return _canAttackFor(state.turn, strength, tileIndex);
   }
 
+  /// A settled, disconnected one-cell holding may change hands without war.
+  /// An unallocated coalition claim still belongs to its shared treaty pool.
+  bool isIsolatedHolding(int tileIndex) {
+    if (tileIndex < 0 || tileIndex >= state.hexes.length) return false;
+    final tile = state.hexes[tileIndex];
+    return tile.active &&
+        tile.owner >= 0 &&
+        tile.coalitionClaim == null &&
+        !tile.neighbors.any((index) {
+          final neighbor = state.hexes[index];
+          return neighbor.active &&
+              neighbor.owner == tile.owner &&
+              neighbor.coalitionClaim == null;
+        });
+  }
+
   bool _canAttackFor(int attacker, int strength, int tileIndex) {
     final tile = state.hexes[tileIndex];
     final defender = tile.coalitionClaim?.captor ?? tile.owner;
+    final isolated = tile.owner != attacker && isIsolatedHolding(tileIndex);
     // Claims have no province, but are not abandoned/neutral land. A pending
     // treaty freezes its exact pool until unanimous allocation or timeout.
     if (tile.coalitionClaim case final claim?) {
@@ -1983,13 +2011,15 @@ class GameEngine {
       }
     }
     if (tile.coalitionClaim?.members.contains(attacker) == true) return false;
-    if (defender >= 0 &&
+    if (!isolated &&
+        defender >= 0 &&
         _isAlive(defender) &&
         (!areEnemies(attacker, defender) ||
             hasMilitaryAccess(attacker, defender))) {
       return false;
     }
-    if (tile.unit != null &&
+    if (!isolated &&
+        tile.unit != null &&
         _isAlive(unitOwnerAt(tileIndex)) &&
         !areEnemies(attacker, unitOwnerAt(tileIndex))) {
       return false;
@@ -2041,8 +2071,10 @@ class GameEngine {
 
   bool _canTraverseLand(int actor, HexTile target) =>
       target.owner == actor ||
-      (target.owner >= 0 && hasMilitaryAccess(actor, target.owner)) ||
-      target.coalitionClaim?.members.contains(actor) == true;
+      target.coalitionClaim?.members.contains(actor) == true ||
+      (!isIsolatedHolding(target.index) &&
+          target.owner >= 0 &&
+          hasMilitaryAccess(actor, target.owner));
 
   bool _canOccupyFriendly(GameUnit unit, HexTile target, {int? actor}) {
     final movingOwner = actor ?? (unit.owner >= 0 ? unit.owner : state.turn);

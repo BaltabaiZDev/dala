@@ -76,6 +76,15 @@ void main() {
       find.byType(Overlay).first,
       matchesGoldenFile('diplomacy_inbox.png'),
     );
+    await tester.tap(find.textContaining('↓ Достық'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Сіз аласыз'), findsOneWidget);
+    expect(find.text('Сіз бересіз'), findsOneWidget);
+    await expectLater(
+      find.byType(Overlay).first,
+      matchesGoldenFile('diplomacy_letter_compact.png'),
+    );
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
     await tester.binding.setSurfaceSize(null);

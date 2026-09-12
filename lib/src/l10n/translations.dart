@@ -35,6 +35,38 @@ String translateGameText(String source, String language) {
   return source;
 }
 
+/// One selected language is loaded at a time, including its dynamic templates.
+class GameTranslationCatalog {
+  GameTranslationCatalog(this.strings)
+    : _templates = [
+        for (final entry in strings.entries)
+          if (entry.key.contains(RegExp(r'\{\d+\}')))
+            _Template(entry.key, [entry.value]),
+      ]..sort((a, b) => b.specificity.compareTo(a.specificity));
+
+  final Map<String, String> strings;
+  final List<_Template> _templates;
+
+  String translate(String source) {
+    final exact = strings[source];
+    if (exact != null) return exact;
+    for (final template in _templates) {
+      final match = template.pattern.firstMatch(source);
+      if (match == null) continue;
+      return template.translations.first.replaceAllMapped(
+        RegExp(r'\{(\d+)\}'),
+        (m) => match[template.arguments.indexOf(int.parse(m[1]!)) + 1] ?? '',
+      );
+    }
+    for (final separator in ['\n', ' · ']) {
+      if (source.contains(separator)) {
+        return source.split(separator).map(translate).join(separator);
+      }
+    }
+    return source;
+  }
+}
+
 class _Template {
   _Template(String source, this.translations) {
     specificity = source.replaceAll(RegExp(r'\{\d+\}'), '').length;

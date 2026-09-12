@@ -1,5 +1,38 @@
 # Kazakh source | Russian | English. {0}, {1} preserve dynamic data.
 Тіл|Язык|Language
+Сіз аласыз|Вы получаете|You receive
+Сіз бересіз|Вы отдаёте|You give
+Одақ біткенде әскер өз еліне қайтады. Орын жоқ болса: біріктіру, болмаса құнын қайтару.|По окончании союза войска возвращаются домой. Нет места: объединение, иначе возврат стоимости.|When an alliance ends, troops return home. If there is no space: merge, otherwise refund their cost.
+{0}: қайтқан әскерге орын жоқ; қазынаға {1} ақша қайтарылды|{0}: нет места для вернувшихся войск; в казну возвращено {1} монет|{0}: no space for returning troops; {1} coins refunded to the treasury
+Толық түсіндірме|Подробнее|Full explanation
+Түсіндірмені жабу|Скрыть пояснение|Hide explanation
+Қатынас −35. Өзара және достармен достық шектеледі.|Отношения −35. Дружба между сторонами и с их друзьями ограничивается.|Relations −35. Friendship between the sides and with their friends is restricted.
+Одаққа сенім: +{0} және ортақ пайда.|Для союза: доверие +{0} и общая выгода.|Alliance: +{0} trust and shared benefit.
++ сізге · − сізден · /ход — төлем · x — қалған ход.|+ вам · − от вас · /ход — платёж · x — осталось ходов.|+ to you · − from you · /turn — payment · x — turns left.
+Бітім · 9 ход соғыссыз|Перемирие · 9 ходов без войны|Truce · no war for 9 turns
+{0} ақша · Қарыз: {1}|{0} монет · Долг: {1}|{0} coins · Debt: {1}
+{0} жер · {1} теңіз · Бағасы {2}|{0} земель · {1} морских объектов · Цена {2}|{0} land · {1} sea assets · Value {2}
+{0}/ход × {1} · Қазір ≤{2}/ход|{0}/ход × {1} · Сейчас ≤{2}/ход|{0}/turn × {1} · Now ≤{2}/turn
+Тілді іздеу|Найти язык|Search languages
+Тіл табылмады|Язык не найден|No languages found
+Тіл жүктелмеді. Қайта көріңіз.|Не удалось загрузить язык. Повторите попытку.|Could not load the language. Please try again.
+Өшіруді растаңыз|Подтвердите удаление|Confirm deletion
+Бұл файл құрылғыдан өшіріледі.|Этот файл будет удалён с устройства.|This file will be deleted from this device.
+Модпен бірге оның ішіндегі {0} карта да өшіріледі.|Вместе с модом будут удалены карты из пакета: {0}.|Deleting this mod also deletes its bundled maps: {0}.
+Бұл модқа тәуелді басқа карталар мод қайта орнатылғанша ашылмайды.|Зависимые карты не откроются, пока вы не установите мод снова.|Other maps requiring this mod cannot be played until you reinstall it.
+Мод мүмкіндіктері|Возможности модов|Mod capabilities
+Модтар бар әскер мен ғимараттардың ережелерін, суреттерін және түстерін өзгертеді. Өз карталарын қоса алады.|Моды изменяют правила, изображения и цвета существующих войск и зданий. Могут включать свои карты.|Mods change the rules, images and colours of existing troops and buildings. They can include custom maps.
+Жаңа қызметі бар нысандар, радар, ұшақ және скрипттер әзірге қолдау таппайды.|Новые типы объектов, радары, самолёты и скрипты пока не поддерживаются.|New object types, radars, aircraft and scripts are not supported yet.
+Карта дайындығы|Подготовка карты|Map setup
+Өлшемі: {0} × {1} · Тараптар: {2}|Размер: {0} × {1} · Стороны: {2}|Size: {0} × {1} · Factions: {2}
+Картаның жері, өлшемі және тараптары автор белгілегендей сақталады.|Рельеф, размер и стороны карты сохраняются как у автора.|The map keeps the author's terrain, size and factions.
+Адамдар: {0} · Боттар: {1}|Люди: {0} · Боты: {1}|Humans: {0} · Bots: {1}
+Адам саны|Число людей|Human players
+Қалған тараптарды боттар басқарады.|Остальными сторонами управляют боты.|Bots control the remaining factions.
+Қонақтарға карта автоматты жіберіледі. Қажетті модтар бәрінде орнатылуы керек.|Гости получают карту автоматически. Нужные моды должны быть установлены у всех.|Guests receive the map automatically. Everyone must have the required mods installed.
+Бұл картада LAN үшін алғашқы екі тараптың да жері болуы керек. Редакторда түзетіңіз.|Для LAN на этой карте нужна земля у первых двух сторон. Исправьте это в редакторе.|LAN requires land for both of the first two factions on this map. Update it in the editor.
+Жері жоқ тарапқа адам тағайындалмайды.|Человека нельзя назначить стороне без земли.|A faction without land cannot be assigned to a human.
+Адам саны карта орындарына сәйкес емес.|Число людей не соответствует местам на карте.|The human player count does not match the map's seats.
 Артқа|Назад|Back
 Баптаулар|Настройки|Settings
 Шығу|Выход|Exit
@@ -37,19 +70,13 @@ Slay ережесі|Правила Slay|Slay rules
 Ход соңы үшін ұстап тұру|Удерживать для конца хода|Hold to end turn
 Сезімталдық|Чувствительность|Sensitivity
 Солақай режим|Режим для левшей|Left-handed mode
-Прогресті көшіру|Перенести прогресс|Transfer progress
 Анықтама|Помощь|Help
 Сақтаулар|Сохранения|Saved games
 Соңғы ойын|Последняя игра|Last game
 бос|пусто|empty
 Автосақтау әр толық ход аяқталғаннан кейін жаңарады.|Автосохранение обновляется после каждого полного хода.|Autosave updates after every complete turn.
-Баптаулар, кампания прогресі, автосақтау және редактор картасы көшіріледі.|Переносятся настройки, прогресс кампании, автосохранение и карта редактора.|Transfers settings, campaign progress, autosave and your editor map.
-Прогресс алмасу буферіне көшірілді.|Прогресс скопирован в буфер обмена.|Progress copied to clipboard.
 Алмасу буферінде дерек жоқ.|Буфер обмена пуст.|Clipboard is empty.
-Прогресс сәтті қалпына келтірілді.|Прогресс восстановлен.|Progress restored.
 Дерек форматы дұрыс емес.|Неверный формат данных.|Invalid data format.
-Прогресті экспорттау|Экспорт прогресса|Export progress
-Прогресті импорттау|Импорт прогресса|Import progress
 Қосымша|Дополнительно|More
 Кездейсоқ түс|Случайный цвет|Random color
 {0}-ойыншы түсі|Цвет игрока {0}|Player {0} color

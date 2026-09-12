@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.4+5
+version: 1.0.5+6
 
 environment:
   sdk: ^3.11.1
@@ -66,16 +66,21 @@ flutter:
   # the material Icons class.
   uses-material-design: true
   assets:
+    - assets/l10n/
     - assets/mods/
     - assets/dala/fonts/OFL.txt
     - assets/dala/fonts/OFL-Math.txt
     - assets/dala/fonts/OFL-Symbols.txt
+    - assets/dala/fonts/OFL-Chinese.txt
     - assets/classic/
     - assets/classic/random_color_pixel.png
     - assets/classic/field_elements/
     - assets/classic/diplomacy/
 
   fonts:
+    - family: Dala Chinese
+      fonts:
+        - asset: assets/dala/fonts/DalaChinese.ttf
     - family: Dala Math
       fonts:
         - asset: assets/dala/fonts/NotoSansMath.ttf

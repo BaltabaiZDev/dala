@@ -444,6 +444,7 @@ class LanRoomHost extends ChangeNotifier {
 
   void startGame(GameController gameController) {
     if (!readyToStart) throw StateError('Барлық LAN орындары толмады.');
+    _validateGameSeats(gameController.state);
     _pinMod(gameController);
     _applyParticipantNames(gameController.state);
     controller = gameController;
@@ -463,6 +464,7 @@ class LanRoomHost extends ChangeNotifier {
   }
 
   void restartGame(GameController gameController) {
+    _validateGameSeats(gameController.state);
     _pinMod(gameController);
     final old = controller;
     if (old != null) old.removeListener(_controllerChanged);
@@ -482,6 +484,13 @@ class LanRoomHost extends ChangeNotifier {
       'turnClock': _turnClockJson(),
     });
     notifyListeners();
+  }
+
+  void _validateGameSeats(GameState state) {
+    if (state.config.humanCount != config.humanCount ||
+        state.config.playerCount != config.playerCount) {
+      throw StateError('Адам саны карта орындарына сәйкес емес.');
+    }
   }
 
   void _applyParticipantNames(GameState state) {

@@ -91,10 +91,20 @@ void main() {
       expect(find.byType(AlertDialog), findsNothing);
       expect(
         find.byKey(const ValueKey('diplomacy-letter-rationale')),
-        findsOneWidget,
+        findsNothing,
       );
       expect(find.textContaining('20 ақша'), findsOneWidget);
       expect(find.textContaining('5 ақша'), findsOneWidget);
+      await tester.ensureVisible(find.text('Толық түсіндірме'));
+      await tester.tap(find.text('Толық түсіндірме'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('diplomacy-letter-rationale')),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(find.text('Түсіндірмені жабу'));
+      await tester.tap(find.text('Түсіндірмені жабу'));
+      await tester.pumpAndSettle();
       expect(routes.pushes, pushes);
       await tester.tap(find.text('Қабылдау'));
       await tester.pumpAndSettle();

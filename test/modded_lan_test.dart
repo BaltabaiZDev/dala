@@ -8,6 +8,7 @@ import 'package:antiyoy_self/src/lan/lan_room_client.dart';
 import 'package:antiyoy_self/src/persistence/save_repository.dart';
 import 'package:antiyoy_self/src/modding/mod_stack.dart';
 import 'package:antiyoy_self/src/lan/lan_protocol.dart';
+import 'package:antiyoy_self/src/modding/content_package.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -31,15 +32,26 @@ void main() {
       final stack = ModStack.compose(base, [b, a]).mod;
       const config = GameConfig(
         mapSize: MapSize.small,
-        playerCount: 2,
-        humanCount: 2,
+        playerCount: 4,
+        humanCount: 1,
         seed: 103,
       );
-      final host = LanRoomHost(config: config, hostName: 'Host', mod: stack);
+      final authored = MapGenerator(stack).generate(config);
+      final map = DalaMap.decode(
+        DalaMap.fromState('Four shores', authored, stack).encode(),
+        mod: stack,
+      );
+      final match = map.createState(stack, multiplayer: true, humanCount: 2);
+      final host = LanRoomHost(
+        config: match.config,
+        hostName: 'Host',
+        mod: stack,
+        mapName: map.name,
+      );
       final clients = <LanRoomClient>[];
       final controller = GameController(
         mod: stack,
-        state: MapGenerator(stack).generate(config),
+        state: match,
         saves: SaveRepository(),
         autosaveEnabled: false,
         authoritativeSimulation: false,
@@ -96,9 +108,30 @@ void main() {
         'second',
         'first',
       ]);
+      expect(host.participants, hasLength(2));
+      final wrongSeats = GameController(
+        mod: stack,
+        state: authored,
+        saves: SaveRepository(),
+        autosaveEnabled: false,
+        authoritativeSimulation: false,
+      );
+      expect(() => host.startGame(wrongSeats), throwsStateError);
+      expect(host.started, isFalse);
+      wrongSeats.dispose();
       host.startGame(controller);
       await until(() => client.hasStarted);
       expect(client.sessionMod!.fingerprint, stack.fingerprint);
+      // The guest only installed mods; the host supplies this exact map.
+      final received = GameState.fromJson(client.stateJson!);
+      expect(received.width, map.width);
+      expect(received.height, map.height);
+      expect(received.config.playerCount, 4);
+      expect(received.config.humanCount, 2);
+      expect(received.isHuman(1), isTrue);
+      expect(received.isHuman(2), isFalse);
+      expect(received.toJson()['hexes'], controller.state.toJson()['hexes']);
+      expect(client.lobby!.mapName, 'Four shores');
     },
   );
   test('LAN uses installed mod; local mismatching rules cannot bind', () async {

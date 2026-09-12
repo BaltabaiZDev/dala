@@ -2,6 +2,7 @@ import '../lan/lan_address.dart';
 import '../lan/lan_server_api.dart';
 import '../persistence/lan_settings_repository.dart';
 import '../l10n/game_locale.dart';
+import 'map_setup_dialog.dart';
 import 'dala_theme.dart';
 import 'dart:async';
 import 'dart:math' as math;
@@ -126,7 +127,16 @@ class _LanScreenState extends State<LanScreen> {
     final roomMod = _roomMod;
     GameState? mapState;
     try {
-      mapState = _selectedMap?.map.createState(roomMod, multiplayer: true);
+      final selectedMap = _selectedMap;
+      if (selectedMap != null) {
+        final humans = await showMapSetup(context, selectedMap.map, lan: true);
+        if (!mounted || humans == null) return;
+        mapState = selectedMap.map.createState(
+          roomMod,
+          multiplayer: true,
+          humanCount: humans,
+        );
+      }
     } on Object catch (error) {
       showTopSnackBar(context, 'Карта ашылмады: $error');
       return;

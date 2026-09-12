@@ -14,6 +14,142 @@ void main() {
   });
 
   group('military alliances', () {
+    test(
+      'isolated holdings can be taken in every diplomatic status without declaring war',
+      () {
+        for (final status in DiplomacyStatus.values) {
+          final state = _isolatedHoldingState();
+          final engine = GameEngine(mod: mod, state: state);
+          engine.setDiplomacyStatus(0, 1, status);
+          expect(engine.isIsolatedHolding(2), isTrue);
+          expect(engine.moveTargets(1), contains(2), reason: status.name);
+          expect(engine.moveUnit(1, 2), isTrue);
+          expect(state.hexes[2].owner, 0);
+          expect(engine.diplomacyBetween(0, 1), status);
+          expect(state.campaigns, isEmpty);
+          expect(state.hexes[4].owner, 1);
+          expect(EditorRepository.isValidState(state), isTrue);
+        }
+      },
+    );
+
+    test(
+      'adjacent same-owner land removes isolated conquest permission, including stale zones',
+      () {
+        final state = _isolatedHoldingState();
+        final engine = GameEngine(mod: mod, state: state);
+        final oldTargets = engine.moveTargets(1);
+        expect(oldTargets, contains(2));
+        state.hexes[3].owner = 1;
+        engine.rebuildProvinces();
+        expect(engine.isIsolatedHolding(2), isFalse);
+        expect(engine.moveUnit(1, 2, knownTargets: oldTargets), isFalse);
+        expect(state.hexes[2].owner, 1);
+      },
+    );
+
+    test(
+      'isolated capture still respects strength and supports direct recruitment',
+      () {
+        final state = _isolatedHoldingState();
+        final engine = GameEngine(mod: mod, state: state);
+        state.hexes[2].object = TileObject.tower;
+        expect(engine.moveTargets(1), isNot(contains(2)));
+        expect(engine.unitBuildTargets(1, 3), contains(2));
+        expect(engine.buyUnit(1, 2, 3), isTrue);
+        expect(state.hexes[2].owner, 0);
+        expect(state.hexes[2].unit!.strength, 3);
+      },
+    );
+
+    for (final home in ['empty', 'merge', 'full', 'island']) {
+      test(
+        'expired alliance returns guest troops safely when home is $home',
+        () {
+          final state = _transitState();
+          final engine = GameEngine(mod: mod, state: state);
+          _formCoalition(engine, 0, 1);
+          expect(engine.moveUnit(1, 2), isTrue);
+          final guest = state.hexes[2].unit!;
+          if (home == 'merge' || home == 'full') {
+            state.hexes[1].unit = GameUnit(
+              strength: home == 'merge' ? 1 : 4,
+              owner: 0,
+              homeProvinceId: 1,
+            );
+          }
+          if (home == 'island') {
+            state.hexes[1].neighbors.remove(2);
+            state.hexes[2].neighbors.remove(1);
+          }
+          state.diplomacyAllianceTurns[0][1] = 1;
+          state.diplomacyAllianceTurns[1][0] = 1;
+          final treasury = engine.provincesOf(0).single;
+          final before = treasury.money;
+          state.turn = 2;
+          engine.endTurn();
+          expect(engine.hasMilitaryAccess(0, 1), isFalse);
+          expect(engine.diplomacyBetween(0, 1), DiplomacyStatus.alliance);
+          expect(state.diplomacyAllianceTurns[0][1], 6);
+          expect(state.hexes[2].unit, isNull);
+          expect(state.hexes[2].object, TileObject.pine);
+          if (home == 'full') {
+            expect(state.hexes[1].unit!.strength, 4);
+            expect(
+              treasury.money,
+              before +
+                  2 * mod.rules.unitPricePerLevel +
+                  engine
+                      .economicBreakdown(treasury, includeDiplomacy: false)
+                      .total,
+            );
+            expect(
+              state.diplomacyLog.any((s) => s.contains('қазынаға')),
+              isTrue,
+            );
+          } else {
+            expect(state.hexes[1].unit!.strength, home == 'merge' ? 3 : 2);
+            if (home != 'merge') expect(state.hexes[1].unit, same(guest));
+            expect(state.hexes[1].unit!.homeProvinceId, treasury.id);
+            expect(state.hexes[1].unit!.transitAllies, isEmpty);
+          }
+          expect(
+            engine.economicBreakdown(engine.provincesOf(1).single).landUnits,
+            0,
+          );
+          if (home != 'island') {
+            expect(EditorRepository.decodeStateJson(state.toJson()), isNotNull);
+          }
+        },
+      );
+    }
+
+    test(
+      'expiry keeps alternate coalition access and freezes an unsettled shared war',
+      () {
+        final state = _transitState();
+        final engine = GameEngine(mod: mod, state: state);
+        _formCoalition(engine, 0, 1);
+        _formCoalition(engine, 1, 2);
+        _formCoalition(engine, 0, 2);
+        expect(engine.moveUnit(1, 2), isTrue);
+        final guest = state.hexes[2].unit;
+        state.diplomacyAllianceTurns[0][1] = 1;
+        state.diplomacyAllianceTurns[1][0] = 1;
+        state.turn = 2;
+        engine.endTurn();
+        expect(engine.hasMilitaryAccess(0, 1), isTrue);
+        expect(state.hexes[2].unit, same(guest));
+        final result = _captureAfterAlliedTransit(mod);
+        result.state.diplomacyAllianceTurns[0][1] = 1;
+        result.state.diplomacyAllianceTurns[1][0] = 1;
+        result.state.turn = 2;
+        result.engine.endTurn();
+        expect(result.state.diplomacyAllianceTurns[0][1], 1);
+        expect(result.engine.hasMilitaryAccess(0, 1), isTrue);
+      },
+    );
+
     test('black mark cannot silently split an active military contract', () {
       final result = _captureAfterAlliedTransit(mod);
       expect(result.engine.placeBlackMark(0, 1), isFalse);
@@ -632,6 +768,29 @@ GameState _blocState(int playerCount) {
     rngState: 1,
     nextProvinceId: playerCount + 1,
   );
+}
+
+GameState _isolatedHoldingState() {
+  final state = _blocState(4);
+  const owners = [0, 0, 1, -1, 1, 1, 2, 2];
+  for (var i = 0; i < state.hexes.length; i++) {
+    state.hexes[i]
+      ..owner = owners[i]
+      ..object = TileObject.none;
+  }
+  for (final i in [0, 4, 6]) {
+    state.hexes[i].object = TileObject.town;
+  }
+  state.hexes[1].unit = GameUnit(strength: 2, owner: 0, homeProvinceId: 1);
+  state.hexes[2].object = TileObject.pine;
+  state.provinces
+    ..clear()
+    ..addAll([
+      Province(id: 1, owner: 0, tiles: [0, 1], money: 100, capital: 0),
+      Province(id: 2, owner: 1, tiles: [4, 5], money: 100, capital: 4),
+      Province(id: 3, owner: 2, tiles: [6, 7], money: 100, capital: 6),
+    ]);
+  return state;
 }
 
 GameState _transitState() {

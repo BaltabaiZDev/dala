@@ -1,7 +1,6 @@
 import '../l10n/game_locale.dart';
 import 'dala_theme.dart';
 import 'dala_art.dart';
-import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -15,6 +14,7 @@ import '../modding/game_mod.dart';
 import '../modding/content_library.dart';
 import '../modding/content_storage.dart';
 import 'content_screen.dart';
+import 'map_setup_dialog.dart';
 import '../persistence/editor_repository.dart';
 import '../persistence/save_repository.dart';
 import '../persistence/settings_repository.dart';
@@ -102,7 +102,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final mod = _library.modForMap(entry);
     if (mod == null) return;
     try {
-      await _openGame(entry.map.createState(mod));
+      final humans = await showMapSetup(context, entry.map);
+      if (!mounted || humans == null) return;
+      await _openGame(entry.map.createState(mod, humanCount: humans));
     } on Object catch (error) {
       if (mounted) showTopSnackBar(context, error.toString());
     }
@@ -326,13 +328,7 @@ class _HomeScreenState extends State<HomeScreen> {
         asset: 'assets/classic/settings_icon.png',
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute<void>(
-            builder: (_) => _SettingsScreen(
-              repository: _settings,
-              saves: widget.saves,
-              editor: _editor,
-              modId: _library.activeMod.id,
-              rules: _library.activeMod.rules,
-            ),
+            builder: (_) => _SettingsScreen(repository: _settings),
           ),
         ),
       ),
@@ -1113,19 +1109,9 @@ class _CampaignScreenState extends State<_CampaignScreen> {
 }
 
 class _SettingsScreen extends StatefulWidget {
-  const _SettingsScreen({
-    required this.repository,
-    required this.saves,
-    required this.editor,
-    required this.modId,
-    required this.rules,
-  });
+  const _SettingsScreen({required this.repository});
 
   final SettingsRepository repository;
-  final SaveRepository saves;
-  final EditorRepository editor;
-  final String modId;
-  final GameRules rules;
 
   @override
   State<_SettingsScreen> createState() => _SettingsScreenState();
@@ -1203,22 +1189,6 @@ class _SettingsScreenState extends State<_SettingsScreen> {
                     _set(settings.copyWith(leftHanded: value)),
               ),
             ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        _TopTextButton(
-          label: 'Прогресті көшіру',
-          color: _green,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => _ProgressTransferScreen(
-                settings: widget.repository,
-                saves: widget.saves,
-                editor: widget.editor,
-                modId: widget.modId,
-                rules: widget.rules,
-              ),
-            ),
           ),
         ),
       ],
@@ -1333,157 +1303,6 @@ class _SaveSlotsScreen extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    ),
-  );
-}
-
-class _ProgressTransferScreen extends StatefulWidget {
-  const _ProgressTransferScreen({
-    required this.settings,
-    required this.saves,
-    required this.editor,
-    required this.modId,
-    required this.rules,
-  });
-
-  final SettingsRepository settings;
-  final SaveRepository saves;
-  final EditorRepository editor;
-  final String modId;
-  final GameRules rules;
-
-  @override
-  State<_ProgressTransferScreen> createState() =>
-      _ProgressTransferScreenState();
-}
-
-class _ProgressTransferScreenState extends State<_ProgressTransferScreen> {
-  String status =
-      'Баптаулар, кампания прогресі, автосақтау және редактор картасы көшіріледі.';
-
-  Future<void> _export() async {
-    final settings = jsonDecode(await widget.settings.exportRaw());
-    final saveRaw = await widget.saves.exportRaw();
-    final editorRaw = await widget.editor.exportRaw(rules: widget.rules);
-    final bundle = jsonEncode({
-      'schema': 1,
-      'progress': settings,
-      'save': saveRaw == null ? null : jsonDecode(saveRaw),
-      'editor': editorRaw == null ? null : jsonDecode(editorRaw),
-    });
-    await Clipboard.setData(ClipboardData(text: bundle));
-    if (mounted) setState(() => status = 'Прогресс алмасу буферіне көшірілді.');
-  }
-
-  Future<void> _import() async {
-    final clipboard = await Clipboard.getData(Clipboard.kTextPlain);
-    final raw = clipboard?.text;
-    if (raw == null || raw.isEmpty) {
-      if (mounted) setState(() => status = 'Алмасу буферінде дерек жоқ.');
-      return;
-    }
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map) throw const FormatException('Bundle is not a map.');
-      final bundle = decoded.cast<String, dynamic>();
-      if (bundle['schema'] != 1 || bundle['progress'] is! Map) {
-        throw const FormatException('Unsupported progress bundle.');
-      }
-      final progress = (bundle['progress'] as Map).cast<String, dynamic>();
-      if (progress['version'] != 1 || progress['settings'] is! Map) {
-        throw const FormatException('Unsupported settings bundle.');
-      }
-      final settingsJson = (progress['settings'] as Map)
-          .cast<String, dynamic>();
-      if (!AppSettings.isValidJson(settingsJson)) {
-        throw const FormatException('Invalid settings bundle.');
-      }
-      final importedSettings = AppSettings.fromJson(settingsJson);
-      final unlocked = progress['unlockedLevels'];
-      if (unlocked is! int || unlocked < 1 || unlocked > 50) {
-        throw const FormatException('Invalid campaign progress.');
-      }
-
-      GameState? importedSave;
-      final save = bundle['save'];
-      if (save != null) {
-        if (save is! Map) throw const FormatException('Invalid save state.');
-        importedSave = EditorRepository.decodeStateJson(
-          save.cast<String, dynamic>(),
-          expectedModId: widget.modId,
-          rules: widget.rules,
-        );
-        if (importedSave == null) {
-          throw const FormatException('Invalid save state.');
-        }
-      }
-
-      GameState? importedEditor;
-      final editor = bundle['editor'];
-      if (editor != null) {
-        importedEditor = widget.editor.decode(
-          jsonEncode(editor),
-          rules: widget.rules,
-        );
-        if (importedEditor == null || importedEditor.modId != widget.modId) {
-          throw const FormatException('Invalid editor state.');
-        }
-      }
-
-      // Validate every section before writing any section. A malformed tail
-      // can no longer leave settings/save partially imported.
-      await widget.settings.save(importedSettings);
-      await widget.settings.setUnlockedLevels(unlocked);
-      if (importedSave == null) {
-        await widget.saves.clear();
-      } else {
-        await widget.saves.save(importedSave);
-      }
-      if (importedEditor != null) {
-        await widget.editor.saveDraft(importedEditor);
-      } else {
-        await widget.editor.clearDraft();
-      }
-      if (mounted) {
-        setState(() => status = 'Прогресс сәтті қалпына келтірілді.');
-      }
-    } on Object {
-      if (mounted) setState(() => status = 'Дерек форматы дұрыс емес.');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => _MenuScaffold(
-    background: _aqua,
-    topLeft: _BackButton(onTap: () => Navigator.pop(context)),
-    child: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(36),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _ClassicPanel(
-              child: GameText(
-                status,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 20, height: 1.35),
-              ),
-            ),
-            const SizedBox(height: 32),
-            _TopTextButton(
-              label: 'Прогресті экспорттау',
-              color: _green,
-              onTap: _export,
-            ),
-            const SizedBox(height: 18),
-            _TopTextButton(
-              label: 'Прогресті импорттау',
-              color: _blue,
-              onTap: _import,
-            ),
-          ],
         ),
       ),
     ),

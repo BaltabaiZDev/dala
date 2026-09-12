@@ -185,6 +185,24 @@ class DalaMap {
   final List<ModReference> requiredMods;
   String get modId => stateJson['modId'] as String;
   String get fingerprint => sha256.convert(encode()).toString();
+  int get width => stateJson['width'] as int;
+  int get height => stateJson['height'] as int;
+  int get playerCount => (stateJson['config'] as Map)['playerCount'] as int;
+  Set<int> get activeFactions => {
+    for (final province in stateJson['provinces'] as List)
+      (province as Map)['owner'] as int,
+  };
+
+  // Human seats in the engine are the first N factions. Never assign a device
+  // to an empty faction in a hand-painted map (it cannot take a turn).
+  int get maxHumanCount {
+    final active = activeFactions;
+    var count = 0;
+    while (count < playerCount && active.contains(count)) {
+      count++;
+    }
+    return count;
+  }
 
   factory DalaMap.fromState(String name, GameState state, GameMod mod) {
     if (!EditorRepository.isValidState(
@@ -262,17 +280,34 @@ class DalaMap {
     }
   }
 
-  GameState createState(GameMod mod, {bool multiplayer = false}) {
+  GameState createState(
+    GameMod mod, {
+    bool multiplayer = false,
+    int? humanCount,
+  }) {
     if (modId != mod.id ||
         (requiredModHash != null && requiredModHash != mod.fingerprint)) {
       throw FormatException('Картаға $modId модының сәйкес нұсқасы керек.');
     }
     final copy = jsonDecode(jsonEncode(stateJson)) as Map<String, dynamic>;
-    if (multiplayer) {
-      final config = copy['config'] as Map<String, dynamic>;
-      config['humanCount'] = config['playerCount'];
-      config.remove('campaignLevel');
+    final config = copy['config'] as Map<String, dynamic>;
+    final minimum = multiplayer ? 2 : 1;
+    if (maxHumanCount < minimum) {
+      throw const FormatException(
+        'Бұл картада LAN үшін алғашқы екі тараптың да жері болуы керек. Редакторда түзетіңіз.',
+      );
     }
+    final humans =
+        humanCount ??
+        (multiplayer
+            ? 2
+            : (config['humanCount'] as int? ?? 1).clamp(1, maxHumanCount));
+    if (humans < minimum || humans > maxHumanCount) {
+      throw const FormatException('Адам саны карта орындарына сәйкес емес.');
+    }
+    config['humanCount'] = humans;
+    // A custom scenario is never an official campaign completion.
+    config.remove('campaignLevel');
     final state = EditorRepository.decodeStateJson(
       copy,
       expectedModId: mod.id,

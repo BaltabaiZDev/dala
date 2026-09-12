@@ -216,6 +216,13 @@ class ContentLibrary extends ChangeNotifier {
     for (final file in mod?.paths ?? {path}) {
       await storage.remove(file);
     }
+    if (mod != null && _activeHashes.contains(mod.hash)) {
+      // An intentional deletion is not a missing-file warning on refresh.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_activeListKey, [
+        for (final hash in _activeHashes) if (hash != mod.hash) hash,
+      ]);
+    }
     await refresh();
   }
 

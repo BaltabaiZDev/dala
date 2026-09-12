@@ -20,6 +20,83 @@ class _ContentScreenState extends State<ContentScreen> {
   bool _busy = false;
   bool _maps = false;
 
+  Future<void> _remove(String path, String name, {InstalledMod? mod}) async {
+    if (_busy) return;
+    final bundled = mod == null
+        ? 0
+        : widget.library.maps
+              .where((entry) => mod.paths.contains(entry.path))
+              .length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        title: const GameText('Өшіруді растаңыз'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GameText(
+              name,
+              translate: false,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 12),
+            const GameText('Бұл файл құрылғыдан өшіріледі.'),
+            if (bundled > 0)
+              GameText(
+                'Модпен бірге оның ішіндегі $bundled карта да өшіріледі.',
+              ),
+            if (mod != null)
+              const GameText(
+                'Бұл модқа тәуелді басқа карталар мод қайта орнатылғанша ашылмайды.',
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const GameText('Бас тарту'),
+          ),
+          FilledButton(
+            key: const ValueKey('confirm-content-delete'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const GameText('Өшіру'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    await _run(() => widget.library.remove(path));
+  }
+
+  void _showCapabilities() => showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      scrollable: true,
+      title: const GameText('Мод мүмкіндіктері'),
+      content: const Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GameText(
+            'Модтар бар әскер мен ғимараттардың ережелерін, суреттерін және түстерін өзгертеді. Өз карталарын қоса алады.',
+          ),
+          SizedBox(height: 12),
+          GameText(
+            'Жаңа қызметі бар нысандар, радар, ұшақ және скрипттер әзірге қолдау таппайды.',
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const GameText('Артқа'),
+        ),
+      ],
+    ),
+  );
+
   Future<void> _run(Future<void> Function() action) async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -84,9 +161,13 @@ class _ContentScreenState extends State<ContentScreen> {
                             ),
                           ),
                         ),
-                        const Icon(
-                          Icons.flag_outlined,
-                          color: DalaTheme.deepWater,
+                        IconButton(
+                          tooltip: context.tr('Мод мүмкіндіктері'),
+                          onPressed: _showCapabilities,
+                          icon: const Icon(
+                            Icons.help_outline,
+                            color: DalaTheme.deepWater,
+                          ),
                         ),
                       ],
                     ),
@@ -371,7 +452,7 @@ class _ContentScreenState extends State<ContentScreen> {
               iconSize: 18,
               onPressed: _busy
                   ? null
-                  : () => _run(() => widget.library.remove(entry.path)),
+                  : () => _remove(entry.path, entry.mod.name, mod: entry),
               icon: const Icon(Icons.delete_outline),
             ),
           ],
@@ -413,6 +494,10 @@ class _ContentScreenState extends State<ContentScreen> {
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontSize: 11),
         ),
+        GameText(
+          'Өлшемі: ${entry.map.width} × ${entry.map.height} · Тараптар: ${entry.map.activeFactions.length}',
+          style: const TextStyle(fontSize: 11),
+        ),
         Row(
           children: [
             TextButton.icon(
@@ -439,7 +524,7 @@ class _ContentScreenState extends State<ContentScreen> {
                 iconSize: 18,
                 onPressed: _busy
                     ? null
-                    : () => _run(() => widget.library.remove(entry.path)),
+                    : () => _remove(entry.path, entry.map.name),
                 icon: const Icon(Icons.delete_outline),
               ),
           ],

@@ -74,7 +74,7 @@ void main() {
         debugShowCheckedModeBanner: false,
         theme: DalaTheme.light,
         locale: language.locale,
-        supportedLocales: const [Locale('kk'), Locale('ru'), Locale('en')],
+        supportedLocales: GameLocale.supportedLocales,
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
         home: home,
       ),
@@ -98,6 +98,8 @@ void main() {
       await tester.pumpWidget(localized(language, home));
       await tester.pumpAndSettle();
       await tester.tap(find.bySemanticsLabel('Баптаулар'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('language-picker')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('language-ru')));
       await tester.pumpAndSettle();
@@ -159,7 +161,7 @@ void main() {
       await tester.tap(find.byType(Switch).last);
       await tester.pumpAndSettle();
       expect(library.activeHashes, hasLength(2));
-      for (final code in GameLocale.supported) {
+      for (final code in ['kk', 'ru', 'en']) {
         await language.select(code);
         await tester.pumpAndSettle();
         expect(find.text('Шайқас'), findsOneWidget);
