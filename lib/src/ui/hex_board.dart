@@ -254,9 +254,10 @@ class _HexBoardState extends State<HexBoard> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 480),
     );
-    ClassicSprites.load(teamColors: widget.controller.mod.palette).then((
-      sprites,
-    ) {
+    ClassicSprites.load(
+      teamColors: widget.controller.mod.palette,
+      overrides: widget.controller.mod.sprites,
+    ).then((sprites) {
       if (!mounted) {
         sprites.dispose();
         return;
@@ -897,7 +898,7 @@ class _HexBoardState extends State<HexBoard> with TickerProviderStateMixin {
     Set<int> waterTargets, {
     bool terrainOnly = false,
   }) => Object.hash(
-    state.turn,
+    terrainOnly ? null : state.turn,
     Object.hashAll(
       state.hexes.map((tile) {
         final claim = tile.coalitionClaim;
@@ -1140,7 +1141,63 @@ class HexActionMaskPainter extends CustomPainter {
       signature == null || signature != oldDelegate.signature;
 }
 
-class HexTerrainCache extends MapRasterCache {}
+class HexTerrainCache extends MapRasterCache {
+  HexTerrainCache({super.rasterizer, super.schedule});
+  List<int> _cells = [];
+  int? _environment;
+
+  List<Rect>? changedCells(HexBoardPainter painter) {
+    final state = painter.state;
+    final environment = Object.hash(
+      state.width,
+      state.height,
+      identityHashCode(painter.sprites),
+      painter.mod.neutralColor,
+      painter.mod.waterColor,
+      Object.hashAll(painter.mod.palette),
+      Object.hashAll(
+        state.waterCells.map(
+          (c) => Object.hash(c.navigable, Object.hashAll(c.tiles)),
+        ),
+      ),
+    );
+    final all =
+        environment != _environment || _cells.length != state.hexes.length;
+    final dirty = <Rect>[];
+    final next = <int>[];
+    for (final tile in state.hexes) {
+      final water = painter._waterByTile[tile.index];
+      final visible = tile.active
+          ? painter.visibleTiles.contains(tile.index)
+          : painter.visibleWaterCells.contains(water);
+      final claim = tile.coalitionClaim;
+      final hash = Object.hash(
+        tile.q,
+        tile.r,
+        tile.inWorld,
+        tile.active,
+        tile.owner + 1,
+        tile.object,
+        painter.fogActive,
+        visible,
+        claim?.captor,
+        claim == null ? null : Object.hashAll(claim.members),
+        claim == null ? null : Object.hashAll(claim.contributors),
+        painter._firingTiles.contains(tile.index),
+      );
+      next.add(hash);
+      if (!all && _cells[tile.index] != hash) {
+        // Include neighbors' borders and overhanging sprites.
+        dirty.add(
+          Rect.fromCircle(center: HexBoard.centerOf(tile), radius: 100),
+        );
+      }
+    }
+    _cells = next;
+    _environment = environment;
+    return all ? null : dirty;
+  }
+}
 
 class HexBoardPainter extends CustomPainter {
   HexBoardPainter({
@@ -1187,6 +1244,14 @@ class HexBoardPainter extends CustomPainter {
   final Set<int> visibleTiles;
   final Set<int> visibleWaterCells;
 
+  late final Map<int, int> _waterByTile = {
+    for (final cell in state.waterCells)
+      for (final tile in cell.tiles) tile: cell.index,
+  };
+  Rect? _recordBounds;
+  bool _inRecordBounds(HexTile tile) =>
+      _recordBounds == null || _recordBounds!.contains(HexBoard.centerOf(tile));
+
   static const Color _hiddenFogColor = Color(0xff637879);
   static const Color _deepWaterColor = Color(0xff365c68);
 
@@ -1212,6 +1277,15 @@ class HexBoardPainter extends CustomPainter {
             ? (canvas) =>
                   _paintTerrain(canvas, highlights: false, overview: true)
             : null,
+        recordRegion: (canvas, bounds) {
+          _recordBounds = bounds.inflate(70);
+          try {
+            _paintTerrain(canvas, highlights: false);
+          } finally {
+            _recordBounds = null;
+          }
+        },
+        changedRegions: () => cache.changedCells(this),
       );
       _drawHighlights(canvas);
     } else {
@@ -1234,7 +1308,7 @@ class HexBoardPainter extends CustomPainter {
   }) {
     _drawWater(canvas, highlights: highlights);
     for (final tile in state.hexes) {
-      if (!tile.active) continue;
+      if (!tile.active || !_inRecordBounds(tile)) continue;
       final center = HexBoard.centerOf(tile);
       _drawHex(canvas, center, tile);
       if (highlights &&
@@ -1271,7 +1345,7 @@ class HexBoardPainter extends CustomPainter {
         continue;
       }
       final tile = state.hexes[index];
-      if (!tile.active) continue;
+      if (!tile.active || !_inRecordBounds(tile)) continue;
       final center = HexBoard.centerOf(tile);
       _drawMoveTarget(canvas, center);
       if (!_firingTiles.contains(index)) {
@@ -1430,7 +1504,7 @@ class HexBoardPainter extends CustomPainter {
     // that every in-world water hex reaches the canvas even while an old save
     // is being repaired or a cell grouping changes at an irregular coast.
     for (final tile in state.hexes) {
-      if (!tile.inWorld || tile.active) continue;
+      if (!tile.inWorld || tile.active || !_inRecordBounds(tile)) continue;
       final cellIndex = waterByTile[tile.index];
       final cellVisible =
           cellIndex != null && visibleWaterCells.contains(cellIndex);
@@ -1508,7 +1582,9 @@ class HexBoardPainter extends CustomPainter {
     // terrain prevents land, navigable sea, deep sea, and incomplete legacy
     // water packing from producing different shades under fog.
     for (final tile in state.hexes) {
-      if (!tile.inWorld || _terrainTileVisible(tile.index, waterByTile)) {
+      if (!tile.inWorld ||
+          !_inRecordBounds(tile) ||
+          _terrainTileVisible(tile.index, waterByTile)) {
         continue;
       }
       canvas.drawPath(
@@ -1674,7 +1750,7 @@ class HexBoardPainter extends CustomPainter {
         for (final tile in cell.tiles) tile: cell.index,
     };
     for (final tile in state.hexes) {
-      if (!tile.active) continue;
+      if (!tile.active || !_inRecordBounds(tile)) continue;
       final center = HexBoard.centerOf(tile);
       final tileVisible = visibleTiles.contains(tile.index);
       for (var edge = 0; edge < directions.length; edge++) {
@@ -1707,6 +1783,7 @@ class HexBoardPainter extends CustomPainter {
                   tileVisible: visibleTiles.contains(tile.index),
                   neighborVisible: visibleTiles.contains(neighbor.index),
                 );
+        if (overview && sameOwner) continue;
         _drawEdge(
           canvas,
           center,
@@ -1721,6 +1798,7 @@ class HexBoardPainter extends CustomPainter {
       final cellVisible = visibleWaterCells.contains(cell.index);
       for (final tileIndex in cell.tiles) {
         final tile = state.hexes[tileIndex];
+        if (!_inRecordBounds(tile)) continue;
         final center = HexBoard.centerOf(tile);
         for (var edge = 0; edge < directions.length; edge++) {
           final nq = tile.q + directions[edge].$1;
@@ -1730,6 +1808,7 @@ class HexBoardPainter extends CustomPainter {
               ? null
               : state.hexes[neighborIndex];
           final seaBoundary = neighbor == null || !neighbor.inWorld;
+          if (overview && !seaBoundary) continue;
           if (neighbor != null && neighbor.inWorld) {
             if (neighbor.active) continue;
             final otherWater = waterByTile[neighbor.index];

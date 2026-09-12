@@ -15,6 +15,23 @@ double area(List<Offset> points) {
 }
 
 void main() {
+  test('rendered cubic paths retain equal cell areas', () {
+    final expected = 3 * math.sqrt(3) * 30 * 30 / 2;
+    var maximum = 0.0;
+    for (var q = -5; q <= 5; q++) {
+      for (var r = -5; r <= 5; r++) {
+        final metric = OrganicCells.path(q, r).computeMetrics().single;
+        final points = [
+          for (var i = 0; i < 1200; i++)
+            metric.getTangentForOffset(metric.length * i / 1200)!.position,
+        ];
+        maximum = math.max(maximum, (area(points) / expected - 1).abs());
+      }
+    }
+    expect(maximum, lessThan(.0001));
+    // ignore: avoid_print
+    print('Actual cubic cell area error: ${maximum * 100}%');
+  });
   test('shared land, coast and water edges are exactly reversed', () {
     for (var q = -10; q <= 10; q++) {
       for (var r = -10; r <= 10; r++) {

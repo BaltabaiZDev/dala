@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../game/game_controller.dart';
 import '../game/models.dart';
+import '../modding/game_mod.dart';
 import 'lan_command_dispatcher.dart';
 import 'lan_protocol.dart';
 import 'lan_server_api.dart';
@@ -15,6 +16,8 @@ class LanRoomHost extends ChangeNotifier {
   LanRoomHost({
     required this.config,
     required String hostName,
+    this.mod,
+    this.mapName,
     String? roomCode,
     LanServerBackend? backend,
     this.turnTimerEnabled = false,
@@ -37,6 +40,9 @@ class LanRoomHost extends ChangeNotifier {
   }
 
   final GameConfig config;
+  final GameMod? mod;
+  final String? mapName;
+  String? _modHash;
   final String roomCode;
   final LanServerBackend _backend;
   final Map<String, LanParticipant> _participants;
@@ -74,6 +80,12 @@ class LanRoomHost extends ChangeNotifier {
     started: started,
     turnTimerEnabled: turnTimerEnabled,
     turnDurationSeconds: turnDurationSeconds,
+    modName: (controller?.mod ?? mod)?.name ?? 'DALA',
+    modHash: _modHash ??= (controller?.mod ?? mod)?.fingerprint,
+    modded:
+        (controller?.mod ?? mod)?.id != null &&
+        (controller?.mod ?? mod)?.id != 'classic_steppe',
+    mapName: mapName,
   );
 
   bool get readyToStart => !started && lobby.readyToStart;
@@ -410,6 +422,7 @@ class LanRoomHost extends ChangeNotifier {
 
   void startGame(GameController gameController) {
     if (!readyToStart) throw StateError('Барлық LAN орындары толмады.');
+    _pinMod(gameController);
     _applyParticipantNames(gameController.state);
     controller = gameController;
     started = true;
@@ -428,6 +441,7 @@ class LanRoomHost extends ChangeNotifier {
   }
 
   void restartGame(GameController gameController) {
+    _pinMod(gameController);
     final old = controller;
     if (old != null) old.removeListener(_controllerChanged);
     _applyParticipantNames(gameController.state);
@@ -452,6 +466,15 @@ class LanRoomHost extends ChangeNotifier {
     for (final participant in participants) {
       state.setPlayerName(participant.seat, participant.name);
     }
+  }
+
+  void _pinMod(GameController controller) {
+    if (controller.state.modId != controller.mod.id ||
+        (mod != null && controller.mod.fingerprint != mod!.fingerprint)) {
+      throw StateError('Бөлме моды мен ойын ережелері сәйкес емес.');
+    }
+    controller.state.modSnapshot = controller.mod.toJson();
+    _modHash = controller.mod.fingerprint;
   }
 
   void detachGameController(GameController gameController) {

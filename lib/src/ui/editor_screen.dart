@@ -11,6 +11,9 @@ import '../game/game_engine.dart';
 import '../game/map_generator.dart';
 import '../game/models.dart';
 import '../modding/game_mod.dart';
+import '../modding/content_library.dart';
+import '../modding/content_files.dart';
+import '../modding/content_package.dart';
 import '../persistence/antiyoy_hd_level_importer.dart';
 import '../persistence/editor_repository.dart';
 import 'antiyoy_loading.dart';
@@ -29,7 +32,17 @@ enum _EditorTool { terrain, owner, object, unit, navy }
 
 enum _EditorNavalAsset { none, boat1, boat2, seaMint, seaFort }
 
-enum _EditorMenuAction { save, load, export, import, regenerate, blank }
+enum _EditorMenuAction {
+  save,
+  load,
+  export,
+  import,
+  regenerate,
+  blank,
+  saveMap,
+  exportFile,
+  importFile,
+}
 
 /// A state-backed map editor. All visible actions modify, persist or launch a
 /// real [GameState]; there are no demo-only controls on this screen.
@@ -38,12 +51,14 @@ class EditorScreen extends StatefulWidget {
     required this.mod,
     required this.repository,
     this.initialState,
+    this.library,
     super.key,
   });
 
   final GameMod mod;
   final EditorRepository repository;
   final GameState? initialState;
+  final ContentLibrary? library;
 
   @override
   State<EditorScreen> createState() => _EditorScreenState();
@@ -118,6 +133,7 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   void _normalize(GameState state) {
+    state.modSnapshot = widget.mod.toJson();
     final existingProvinceIds = state.provinces
         .map((province) => province.id)
         .toSet();
@@ -515,6 +531,67 @@ class _EditorScreenState extends State<EditorScreen> {
     _persistedRevision = ++_stateRevision;
   }
 
+  Future<void> _saveMapFile({bool export = false}) async {
+    final state = _state;
+    if (state == null) return;
+    var enteredName = 'Менің картам';
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Карта атауы'),
+        content: TextFormField(
+          initialValue: enteredName,
+          onChanged: (value) => enteredName = value,
+          maxLength: 80,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Бас тарту'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, enteredName),
+            child: const Text('Сақтау'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || name == null) return;
+    try {
+      final map = DalaMap.fromState(name, state, widget.mod);
+      if (export) {
+        if (await ContentFiles.save('dala-map.dalamap', map.encode())) {
+          _showStatus('Карта файлға экспортталды');
+        }
+      } else {
+        final library = widget.library ?? ContentLibrary(widget.mod);
+        await library.importFile('dala-map.dalamap', map.encode());
+        _showStatus('Карта кітапханаға сақталды');
+      }
+    } on Object catch (error) {
+      _showStatus(error.toString());
+    }
+  }
+
+  Future<void> _importMapFile() async {
+    try {
+      final file = await ContentFiles.pick();
+      if (file == null || !mounted) return;
+      final map = DalaMap.decode(file.bytes, mod: widget.mod);
+      final state = map.createState(widget.mod);
+      setState(() {
+        _state = state;
+        _selectedTile = null;
+        _owner = 0;
+      });
+      _scheduleAutosave();
+      _showStatus('Карта файлдан жүктелді');
+    } on Object catch (error) {
+      _showStatus(error.toString());
+    }
+  }
+
   Future<void> _export() async {
     final state = _state;
     if (state == null) return;
@@ -643,6 +720,15 @@ class _EditorScreenState extends State<EditorScreen> {
 
   Future<void> _handleMenu(_EditorMenuAction action) async {
     switch (action) {
+      case _EditorMenuAction.saveMap:
+        await _saveMapFile();
+        break;
+      case _EditorMenuAction.exportFile:
+        await _saveMapFile(export: true);
+        break;
+      case _EditorMenuAction.importFile:
+        await _importMapFile();
+        break;
       case _EditorMenuAction.save:
         await _saveNow();
         break;
@@ -817,6 +903,18 @@ class _EditorHeader extends StatelessWidget {
               child: Text('Жобаны жүктеу'),
             ),
             PopupMenuDivider(),
+            PopupMenuItem(
+              value: _EditorMenuAction.saveMap,
+              child: Text('Кітапханаға сақтау'),
+            ),
+            PopupMenuItem(
+              value: _EditorMenuAction.exportFile,
+              child: Text('.dalamap экспорттау'),
+            ),
+            PopupMenuItem(
+              value: _EditorMenuAction.importFile,
+              child: Text('Карта файлын импорттау'),
+            ),
             PopupMenuItem(
               value: _EditorMenuAction.export,
               child: Text('Картаны экспорттау'),

@@ -9,6 +9,32 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'local edit retains unrelated textures and records only missing regions',
+    () async {
+      final probe = _RasterProbe(maxDetailBytes: 32 * 1024 * 1024);
+      probe.cache.setViewport(const ui.Rect.fromLTWH(0, 0, 800, 800), 2);
+      probe.draw(1, regions: true, dirty: null);
+      await probe.drain();
+      expect(probe.detailRecords, 4);
+      expect(probe.fullRecords, 0);
+      expect(probe.cache.textureCount, 5);
+      final calls = probe.calls;
+      probe.draw(
+        2,
+        regions: true,
+        dirty: [const ui.Rect.fromLTWH(5, 5, 10, 10)],
+      );
+      expect(probe.cache.hasDetailAt(const ui.Offset(20, 20)), isFalse);
+      expect(probe.cache.hasDetailAt(const ui.Offset(700, 700)), isTrue);
+      await probe.drain();
+      expect(probe.calls - calls, 2); // one overview plus one changed tile
+      expect(probe.detailRecords, 5);
+      expect(probe.cache.textureCount, 5);
+      probe.cache.dispose();
+    },
+  );
+
+  test(
     'pixel cache reuses terrain across camera transforms and bounds memory',
     () async {
       final probe = _RasterProbe();
@@ -123,9 +149,10 @@ class _RasterProbe {
   _RasterProbe({
     ui.Color background = const ui.Color(0xff12384f),
     bool fail = false,
+    int maxDetailBytes = 5 * 1024 * 1024,
   }) {
     cache = MapRasterCache(
-      maxDetailBytes: 5 * 1024 * 1024,
+      maxDetailBytes: maxDetailBytes,
       backgroundColor: background,
       schedule: jobs.add,
       rasterizer: (picture, width, height) {
@@ -145,13 +172,21 @@ class _RasterProbe {
   Future<void>? hold;
   Future<void>? current;
   int calls = 0;
+  int detailRecords = 0;
+  int fullRecords = 0;
 
-  ui.Picture? draw(int signature, {bool retain = false}) {
+  ui.Picture? draw(
+    int signature, {
+    bool retain = false,
+    bool regions = false,
+    List<ui.Rect>? dirty,
+  }) {
     final recorder = ui.PictureRecorder();
     cache.draw(
       ui.Canvas(recorder),
       signature,
       (canvas) {
+        fullRecords++;
         canvas.drawRect(
           const ui.Rect.fromLTWH(0, 0, 800, 800),
           ui.Paint()..color = const ui.Color(0x66000000),
@@ -159,12 +194,24 @@ class _RasterProbe {
       },
       size: const ui.Size(800, 800),
       rasterize: true,
+      recordOverview: regions
+          ? (canvas) => canvas.drawColor(backgroundColor, ui.BlendMode.src)
+          : null,
+      recordRegion: regions
+          ? (canvas, bounds) {
+              detailRecords++;
+              canvas.drawRect(bounds, ui.Paint()..color = backgroundColor);
+            }
+          : null,
+      changedRegions: regions ? () => dirty : null,
     );
     final picture = recorder.endRecording();
     if (retain) return picture;
     picture.dispose();
     return null;
   }
+
+  static const backgroundColor = ui.Color(0xff12384f);
 
   void startNext() {
     jobs.removeAt(0)();

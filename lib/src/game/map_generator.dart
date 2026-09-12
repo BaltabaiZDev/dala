@@ -14,7 +14,7 @@ Future<GameState> generateMapAsync(GameMod mod, GameConfig config) async {
     'mod': mod.toJson(),
     'config': config.toJson(),
   });
-  return GameState.fromJson(json);
+  return GameState.fromJson(json)..modSnapshot = mod.toJson();
 }
 
 Map<String, dynamic> _generateMapJson(Map<String, dynamic> payload) {

@@ -19,6 +19,9 @@ class OrganicCells {
   static final _paths = <(int, int), Path>{};
   static final _boundaries = <(int, int), List<Offset>>{};
   static final _edges = <(int, int, int), List<Offset>>{};
+  static final _edgePaths = <(int, int, int), Path>{};
+  static final _centers = <(int, int), Offset>{};
+  static final _centerCoordinates = <Offset, (int, int)>{};
   // A giant board has 5,041 cells. Bound retained geometry across editor/map
   // changes and off-board pointer input without evicting a normal whole map.
   static T _cached<K, T>(
@@ -47,12 +50,21 @@ class OrganicCells {
     return Offset(point.dx - 8 * math.sin(y / 113 + .7), y);
   }
 
-  static Offset center(int q, int r) => warp(
-    Offset(
-      padding + radius * (1.5 * q + 1),
-      padding + math.sqrt(3) * radius * (r + q / 2 + .5),
-    ),
-  );
+  static Offset center(int q, int r) {
+    final value = _cached(
+      _centers,
+      (q, r),
+      8192,
+      () => warp(
+        Offset(
+          padding + radius * (1.5 * q + 1),
+          padding + math.sqrt(3) * radius * (r + q / 2 + .5),
+        ),
+      ),
+    );
+    _cached(_centerCoordinates, value, 8192, () => (q, r));
+    return value;
+  }
 
   static (int, int) nearestAxial(Offset position) {
     final point = unwarp(position);
@@ -131,15 +143,33 @@ class OrganicCells {
     ],
   );
 
-  static Path path(int q, int r) => _cached(
-    _paths,
-    (q, r),
-    8192,
-    () => Path()..addPolygon(boundary(q, r), true),
-  );
+  static Path path(int q, int r) => _cached(_paths, (q, r), 8192, () {
+    final result = Path();
+    for (final direction in [0, 5, 4, 3, 2, 1]) {
+      _appendCurve(result, edge(q, r, direction), move: direction == 0);
+    }
+    return result..close();
+  });
+
+  // Two cubic pieces interpolate each shared warped edge. The old 24 tiny
+  // straight strokes per edge forced mobile GPUs to tessellate hundreds of
+  // thousands of round joins on giant maps. Cubics retain the same lobes and
+  // endpoints with a sub-pixel approximation, and GPU-adaptive subdivision.
+  static void _appendCurve(Path path, List<Offset> p, {bool move = true}) {
+    if (move) path.moveTo(p.first.dx, p.first.dy);
+    for (final start in [0, 12]) {
+      final a = p[start + 4] * 27 - p[start] * 8 - p[start + 12];
+      final b = p[start + 8] * 27 - p[start] - p[start + 12] * 8;
+      final c1 = (a * 2 - b) / 18;
+      final c2 = (b * 2 - a) / 18;
+      final end = p[start + 12];
+      path.cubicTo(c1.dx, c1.dy, c2.dx, c2.dy, end.dx, end.dy);
+    }
+  }
 
   static Path around(Offset cellCenter, {double inset = 0}) {
-    final coordinate = nearestAxial(cellCenter);
+    final coordinate =
+        _centerCoordinates[cellCenter] ?? nearestAxial(cellCenter);
     final original = path(coordinate.$1, coordinate.$2);
     if (inset == 0) return original;
     final scale = (radius - inset) / radius;
@@ -150,8 +180,17 @@ class OrganicCells {
   }
 
   static Path edgePath(Offset cellCenter, int direction) {
-    final coordinate = nearestAxial(cellCenter);
-    return Path()
-      ..addPolygon(edge(coordinate.$1, coordinate.$2, direction), false);
+    final coordinate =
+        _centerCoordinates[cellCenter] ?? nearestAxial(cellCenter);
+    return _cached(
+      _edgePaths,
+      (coordinate.$1, coordinate.$2, direction),
+      32768,
+      () {
+        final path = Path();
+        _appendCurve(path, edge(coordinate.$1, coordinate.$2, direction));
+        return path;
+      },
+    );
   }
 }

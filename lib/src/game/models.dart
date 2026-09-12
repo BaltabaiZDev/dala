@@ -984,6 +984,7 @@ class GameState {
   GameState({
     required this.config,
     required this.modId,
+    this.modSnapshot,
     required this.width,
     required this.height,
     required this.hexes,
@@ -1050,6 +1051,7 @@ class GameState {
 
   final GameConfig config;
   final String modId;
+  Map<String, dynamic>? modSnapshot;
   int width;
   int height;
   final List<HexTile> hexes;
@@ -1114,6 +1116,7 @@ class GameState {
     'schema': 12,
     'config': config.toJson(),
     'modId': modId,
+    if (modSnapshot != null) 'modSnapshot': modSnapshot,
     'width': width,
     'height': height,
     'hexes': hexes.map((tile) => tile.toJson()).toList(),
@@ -1158,6 +1161,7 @@ class GameState {
   factory GameState.fromJson(Map<String, dynamic> json) => GameState(
     config: GameConfig.fromJson(json['config'] as Map<String, dynamic>),
     modId: json['modId'] as String,
+    modSnapshot: (json['modSnapshot'] as Map?)?.cast<String, dynamic>(),
     width: json['width'] as int,
     height: json['height'] as int,
     hexes: (json['hexes'] as List)

@@ -1,0 +1,87 @@
+{
+  "format": "dala-mod",
+  "version": 1,
+  "mod": {
+    "id": "molshylyk",
+    "name": "Молшылық",
+    "title": "Молшылық",
+    "version": 1,
+    "rules": {
+      "unitMoveLimit": 4,
+      "unitPricePerLevel": 10,
+      "farmBasePrice": 12,
+      "farmPriceGrowth": 2,
+      "towerPrice": 15,
+      "strongTowerPrice": 35,
+      "farmIncome": 7,
+      "treeCutReward": 3,
+      "unitUpkeep": [
+        0,
+        2,
+        6,
+        18,
+        36
+      ],
+      "towerUpkeep": 1,
+      "strongTowerUpkeep": 6,
+      "port1Price": 45,
+      "port2Price": 75,
+      "boat1Price": 40,
+      "boat2Price": 110,
+      "port1Upkeep": 2,
+      "port2Upkeep": 6,
+      "boat1Upkeep": 3,
+      "boat2Upkeep": 8,
+      "boatMoveLimit": 2,
+      "portLaunchRadius": 0,
+      "boat1Capacity": 4,
+      "boat2Capacity": 10,
+      "seaFortPrice": 80,
+      "seaFortUpkeep": 8,
+      "navalSupplyUpkeep": 1,
+      "artilleryCosts": [
+        0,
+        50,
+        65,
+        90
+      ],
+      "artilleryUpkeep": [
+        0,
+        4,
+        8,
+        14
+      ],
+      "artilleryAmmoCapacity": [
+        0,
+        2,
+        4,
+        7
+      ],
+      "artilleryShotCost": 0,
+      "initialMoney": 30,
+      "pineSpreadChance": 0.2,
+      "palmSpreadChance": 0.3
+    },
+    "palette": [
+      "#88b88e",
+      "#d38f7c",
+      "#91b9d0",
+      "#d9bd78",
+      "#b5a0c6",
+      "#79beb7",
+      "#d8a374",
+      "#a8bf7a",
+      "#cb9db3",
+      "#6fad9a",
+      "#9eacd0",
+      "#c2af76",
+      "#759bbf",
+      "#bc8292",
+      "#a9beaa"
+    ],
+    "neutralColor": "#d4d5b8",
+    "waterColor": "#669ea9",
+    "author": "DALA",
+    "description": "Ферманың табысы 7, бастапқы қазына 30. Мод жасауға арналған үлгі."
+  }
+}

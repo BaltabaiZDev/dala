@@ -1,7 +1,7 @@
 import '../game/models.dart';
 
 // Timed military treaties must not be interpreted as eternal by older clients.
-const int lanProtocolVersion = 4;
+const int lanProtocolVersion = 5;
 const int lanDefaultPort = 7358;
 const int lanMaxPlayerNameLength = 20;
 const int lanMaxMessageLength = 512;
@@ -93,6 +93,10 @@ class LanLobbyState {
     required this.started,
     this.turnTimerEnabled = false,
     this.turnDurationSeconds = 0,
+    this.modName = 'DALA',
+    this.modHash,
+    this.modded = false,
+    this.mapName,
   });
 
   final String roomCode;
@@ -101,6 +105,10 @@ class LanLobbyState {
   final bool started;
   final bool turnTimerEnabled;
   final int turnDurationSeconds;
+  final String modName;
+  final String? modHash;
+  final bool modded;
+  final String? mapName;
 
   bool get readyToStart {
     final occupied = participants
@@ -122,6 +130,10 @@ class LanLobbyState {
     'started': started,
     'turnTimerEnabled': turnTimerEnabled,
     'turnDurationSeconds': turnDurationSeconds,
+    'modName': modName,
+    'modHash': modHash,
+    'modded': modded,
+    'mapName': mapName,
   };
 
   factory LanLobbyState.fromJson(Map<String, dynamic> json) => LanLobbyState(
@@ -137,6 +149,10 @@ class LanLobbyState {
     started: json['started'] as bool? ?? false,
     turnTimerEnabled: json['turnTimerEnabled'] as bool? ?? false,
     turnDurationSeconds: (json['turnDurationSeconds'] as num?)?.toInt() ?? 0,
+    modName: json['modName'] as String? ?? 'DALA',
+    modHash: json['modHash'] as String?,
+    modded: json['modded'] as bool? ?? false,
+    mapName: json['mapName'] as String?,
   );
 }
 

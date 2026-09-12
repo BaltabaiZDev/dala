@@ -341,7 +341,7 @@ void main() {
 
 GameState _twoPlayerState(GameConfig config) => GameState(
   config: config,
-  modId: 'classic',
+  modId: 'classic_steppe',
   width: 4,
   height: 1,
   hexes: [

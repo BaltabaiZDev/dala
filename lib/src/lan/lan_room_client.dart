@@ -7,6 +7,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../game/game_controller.dart';
 import '../game/models.dart';
+import '../modding/game_mod.dart';
 import 'lan_protocol.dart';
 import 'lan_state_patch.dart';
 
@@ -27,6 +28,7 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
   LanConnectionStatus status = LanConnectionStatus.idle;
   LanLobbyState? lobby;
   Map<String, dynamic>? stateJson;
+  GameMod? sessionMod;
   Map<String, dynamic>? latestUi;
   int revision = 0;
   int seat = -1;
@@ -47,7 +49,7 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
   @override
   bool get busy => _pending.isNotEmpty;
 
-  bool get hasStarted => stateJson != null && seat >= 0;
+  bool get hasStarted => stateJson != null && sessionMod != null && seat >= 0;
 
   Future<void> connect({
     required String address,
@@ -194,7 +196,7 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
           break;
       }
       _refresh();
-    } on FormatException {
+    } on Object {
       error = 'Хост жарамсыз LAN жауабын жіберді.';
       _refresh();
     }
@@ -216,8 +218,16 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
   void _readState(Object? raw) {
     if (raw is! Map) return;
     final next = raw.cast<String, dynamic>();
+    final rawMod = next['modSnapshot'];
+    if (rawMod is! Map) throw const FormatException('LAN моды берілмеді.');
+    final nextMod = GameMod.fromJson(rawMod.cast<String, dynamic>());
+    if (nextMod.id != next['modId'] ||
+        (lobby?.modHash != null && nextMod.fingerprint != lobby!.modHash)) {
+      throw const FormatException('LAN модының нұсқасы сәйкес емес.');
+    }
     // Parsing here fails closed before the snapshot reaches the renderer.
     GameState.fromJson(next);
+    sessionMod = nextMod;
     stateJson = next;
     final controller = _boundController;
     if (controller != null) {
@@ -245,6 +255,10 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
   }
 
   void bindController(GameController controller) {
+    if (sessionMod != null &&
+        controller.mod.fingerprint != sessionMod!.fingerprint) {
+      throw StateError('Клиент хосттың мод ережелерін қолдануы керек.');
+    }
     _boundController = controller;
     controller.networkDelegate = this;
     final snapshot = stateJson;

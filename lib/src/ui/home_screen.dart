@@ -11,6 +11,9 @@ import '../game/map_generator.dart';
 import '../game/models.dart';
 import '../game/scenario_catalog.dart';
 import '../modding/game_mod.dart';
+import '../modding/content_library.dart';
+import '../modding/content_storage.dart';
+import 'content_screen.dart';
 import '../persistence/editor_repository.dart';
 import '../persistence/save_repository.dart';
 import '../persistence/settings_repository.dart';
@@ -46,14 +49,23 @@ GameMod _withPlayerColor(GameMod mod, int offset) {
     ],
     neutralColor: mod.neutralColor,
     waterColor: mod.waterColor,
+    sprites: mod.sprites,
+    author: mod.author,
+    description: mod.description,
   );
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({required this.gameMod, required this.saves, super.key});
+  const HomeScreen({
+    required this.gameMod,
+    required this.saves,
+    this.contentStorage,
+    super.key,
+  });
 
   final GameMod gameMod;
   final SaveRepository saves;
+  final ContentStorage? contentStorage;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -63,10 +75,43 @@ class _HomeScreenState extends State<HomeScreen> {
   final SettingsRepository _settings = const SettingsRepository();
   final EditorRepository _editor = const EditorRepository();
   late Future<bool> _hasSave;
+  late final ContentLibrary _library;
+  late final Future<void> _contentReady;
+
+  void _contentChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _library.removeListener(_contentChanged);
+    _library.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openContent() async {
+    await _contentReady;
+    await _library.refresh();
+    if (!mounted) return;
+    final entry = await Navigator.of(context).push<InstalledMap>(
+      MaterialPageRoute(builder: (_) => ContentScreen(library: _library)),
+    );
+    if (!mounted || entry == null) return;
+    final mod = _library.modForMap(entry);
+    if (mod == null) return;
+    try {
+      await _openGame(entry.map.createState(mod));
+    } on Object catch (error) {
+      if (mounted) showTopSnackBar(context, error.toString());
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _library = ContentLibrary(widget.gameMod, storage: widget.contentStorage)
+      ..addListener(_contentChanged);
+    _contentReady = _library.refresh();
     _refreshSave();
   }
 
@@ -91,11 +136,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _startConfig(GameConfig config) async {
+    await _contentReady;
+    if (!mounted) return;
     final result = await runWithAntiyoyLoader(
       context,
       semanticsLabel: 'Карта жасалуда',
       task: () async {
-        final state = await generateMapAsync(widget.gameMod, config);
+        final state = await generateMapAsync(_library.activeMod, config);
         final settings = await _settings.load();
         if (settings.autosave) await widget.saves.save(state);
         return (state: state, autosave: settings.autosave);
@@ -106,9 +153,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openPlayerLevels() async {
+    await _contentReady;
+    if (!mounted) return;
     final result = await Navigator.of(context).push<Object>(
       MaterialPageRoute<Object>(
-        builder: (_) => _CampaignScreen(editor: _editor, mod: widget.gameMod),
+        builder: (_) =>
+            _CampaignScreen(editor: _editor, mod: _library.activeMod),
       ),
     );
     if (!mounted || result == null) return;
@@ -119,9 +169,9 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (result is GameState) {
       if (EditorRepository.isValidState(
         result,
-        expectedModId: widget.gameMod.id,
+        expectedModId: _library.activeMod.id,
         requirePlayable: true,
-        rules: widget.gameMod.rules,
+        rules: _library.activeMod.rules,
       )) {
         await _openGame(result);
       }
@@ -149,7 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
       task: () async {
         final editorConfigJson = config.toJson()..remove('campaignLevel');
         final state = await generateMapAsync(
-          widget.gameMod,
+          _library.activeMod,
           GameConfig.fromJson(editorConfigJson),
         );
         await _editor.saveDraft(state);
@@ -161,6 +211,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openGame(GameState state, {bool? autosaveEnabled}) async {
+    await _contentReady;
+    if (!mounted) return;
+    late final GameMod matchMod;
+    try {
+      matchMod = _library.resolveSavedMod(state.modId, state.modSnapshot);
+      state.modSnapshot = matchMod.toJson();
+      await ContentLibrary.validateImages(matchMod);
+    } on Object catch (error) {
+      if (mounted) showTopSnackBar(context, error.toString());
+      return;
+    }
     final settings = await _settings.load();
     final shouldAutosave = autosaveEnabled ?? settings.autosave;
     if (!mounted) return;
@@ -184,7 +245,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
             controller: GameController(
               mod: _withPlayerColor(
-                widget.gameMod,
+                matchMod,
                 activeState.config.playerColorOffset,
               ),
               state: activeState,
@@ -203,22 +264,48 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(_refreshSave);
   }
 
+  Future<void> _openLan() async {
+    await _contentReady;
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => LanScreen(
+          mod: _library.activeMod,
+          defaultMod: widget.gameMod,
+          library: _library,
+          saves: widget.saves,
+          pickConfig: (context) => Navigator.of(context).push<GameConfig>(
+            MaterialPageRoute(
+              builder: (_) => _NewGameScreen(
+                repository: _settings,
+                palette: _library.activeMod.palette,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _openEditor({GameState? initialState}) async {
+    await _contentReady;
+    if (!mounted) return;
     final state = await Navigator.of(context).push<GameState>(
       MaterialPageRoute<GameState>(
         builder: (_) => EditorScreen(
-          mod: widget.gameMod,
+          mod: _library.activeMod,
           repository: _editor,
           initialState: initialState,
+          library: _library,
         ),
       ),
     );
     if (!mounted || state == null) return;
     if (!EditorRepository.isValidState(
       state,
-      expectedModId: widget.gameMod.id,
+      expectedModId: _library.activeMod.id,
       requirePlayable: true,
-      rules: widget.gameMod.rules,
+      rules: _library.activeMod.rules,
     )) {
       showTopSnackBar(context, 'Редактор картасы ойнатуға жарамсыз.');
       return;
@@ -241,8 +328,8 @@ class _HomeScreenState extends State<HomeScreen> {
               repository: _settings,
               saves: widget.saves,
               editor: _editor,
-              modId: widget.gameMod.id,
-              rules: widget.gameMod.rules,
+              modId: _library.activeMod.id,
+              rules: _library.activeMod.rules,
             ),
           ),
         ),
@@ -306,31 +393,28 @@ class _HomeScreenState extends State<HomeScreen> {
                           onTap: () => _openConfigScreen(
                             _NewGameScreen(
                               repository: _settings,
-                              palette: widget.gameMod.palette,
+                              palette: _library.activeMod.palette,
                             ),
                           ),
                         ),
                         _MenuBand(
                           label: 'LAN ойыны',
                           color: _orange,
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => LanScreen(
-                                mod: widget.gameMod,
-                                saves: widget.saves,
-                                pickConfig: (lanContext) =>
-                                    Navigator.of(lanContext).push<GameConfig>(
-                                      MaterialPageRoute<GameConfig>(
-                                        builder: (_) => _NewGameScreen(
-                                          repository: _settings,
-                                          palette: widget.gameMod.palette,
-                                        ),
-                                      ),
-                                    ),
-                              ),
+                          onTap: _openLan,
+                        ),
+                        _MenuBand(
+                          label: 'Модтар мен карталар',
+                          color: _blue,
+                          onTap: _openContent,
+                        ),
+                        if (_library.activeHash != null)
+                          Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Text(
+                              'Мод: ${_library.activeMod.name}',
+                              style: const TextStyle(fontSize: 12),
                             ),
                           ),
-                        ),
                         _MenuBand(
                           label: 'Редактор',
                           color: _green,

@@ -4,7 +4,7 @@
 
 Құрлық, теңіз және дипломатия туралы Flutter/Dart стратегиясы. «Дала атласы» көрінісі тең ауданды, табиғи иілген ұяшықтарды қолданады. Android, iOS, Web және Windows бір код базасын қолданады.
 
-Соңғы өзгерістер: [жаңа дизайн](docs/DALA_DESIGN_20260912.md) және [ойын логикасының аудиті](docs/GAME_LOGIC_AUDIT_20260912.md).
+Соңғы өзгерістер: [модтар, карталар және өнімділік](docs/CONTENT_AND_PERFORMANCE_20260912.md), [жаңа дизайн](docs/DALA_DESIGN_20260912.md) және [ойын логикасының аудиті](docs/GAME_LOGIC_AUDIT_20260912.md).
 
 ## Қазір жұмыс істейтін мүмкіндіктер
 
@@ -23,7 +23,8 @@
   Antiyoy HD level code-ты импорттайтын карта редакторы;
 - жеңіс шарты, толық ход соңындағы autosave және «Жалғастыру»;
 - mouse/touch pan + pinch/wheel zoom;
-- JSON негізіндегі ереже мен түс модтары.
+- сырттан `.dalamod` ереже/түстер/спрайт пакеттерін орнату және экспорттау;
+- `mods/` және `maps/` кітапханасы, `.dalamap` карталары, LAN-да кәдімгі/мод режимі.
 
 ## Іске қосу
 
@@ -44,7 +45,7 @@ flutter build web --release
 
 - `lib/src/game/` — Flutter-ға тәуелсіз state, generator, rules engine және AI;
 - `lib/src/ui/` — экрандар мен бір canvas-тағы hex renderer;
-- `lib/src/modding/` — JSON manifest loader;
+- `lib/src/modding/` — пакет тексеру, файл импорты/экспорты және контент кітапханасы;
 - `lib/src/persistence/` — versioned autosave, баптау және редактор жобасы;
 - `assets/mods/` — bundled модтар.
 

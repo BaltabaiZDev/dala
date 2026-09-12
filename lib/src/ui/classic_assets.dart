@@ -1,5 +1,6 @@
 import 'dala_art.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -21,6 +22,7 @@ class ClassicSprites {
 
   static Future<ClassicSprites> load({
     List<ui.Color> teamColors = const [],
+    Map<String, String> overrides = const {},
   }) async {
     const names = <String>[
       'selection',
@@ -64,7 +66,21 @@ class ClassicSprites {
     ];
     final result = <String, ui.Image>{};
     for (final name in names) {
-      result[name] = await DalaArt.rasterize(name);
+      final encoded = overrides[name];
+      if (encoded == null) {
+        result[name] = await DalaArt.rasterize(name);
+      } else {
+        final codec = await ui.instantiateImageCodec(
+          base64Decode(encoded),
+          targetWidth: 128,
+          targetHeight: 128,
+        );
+        try {
+          result[name] = (await codec.getNextFrame()).image;
+        } finally {
+          codec.dispose();
+        }
+      }
     }
     // A color filter on every sprite can require an offscreen pass on mobile
     // GL. Pre-tint tiny team masks once, never a map-sized target during pan.

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
+import 'package:crypto/crypto.dart';
 
 class GameRules {
   const GameRules({
@@ -115,6 +116,9 @@ class GameRules {
     int readInt(String key, {int? fallback}) {
       final value = json[key];
       if (value is num && value.isFinite && value == value.roundToDouble()) {
+        if (value.abs() > 1000000) {
+          throw FormatException('Mod rule "$key" is too large.');
+        }
         return value.toInt();
       }
       if (fallback != null && value == null) return fallback;
@@ -135,7 +139,7 @@ class GameRules {
 
     List<int> readList(String key, List<int> fallback, int minimumLength) {
       final raw = json[key] ?? fallback;
-      if (raw is! List || raw.length < minimumLength) {
+      if (raw is! List || raw.length < minimumLength || raw.length > 64) {
         throw FormatException(
           'Mod rule "$key" must contain at least $minimumLength integers.',
         );
@@ -148,6 +152,9 @@ class GameRules {
           throw FormatException('Mod rule "$key" contains a non-integer.');
         }
         values.add(value.toInt());
+        if (value.abs() > 1000000) {
+          throw FormatException('Mod rule "$key" is too large.');
+        }
       }
       return List<int>.unmodifiable(values);
     }
@@ -266,6 +273,9 @@ class GameMod {
     required this.palette,
     required this.neutralColor,
     required this.waterColor,
+    this.sprites = const {},
+    this.author = '',
+    this.description = '',
   });
 
   final String id;
@@ -276,6 +286,23 @@ class GameMod {
   final List<Color> palette;
   final Color neutralColor;
   final Color waterColor;
+  final Map<String, String> sprites;
+  final String author;
+  final String description;
+
+  static final _fingerprints = Expando<String>();
+  String get fingerprint =>
+      _fingerprints[this] ??
+      sha256.convert(utf8.encode(jsonEncode(_canonical(toJson())))).toString();
+
+  static Object? _canonical(Object? value) {
+    if (value is Map) {
+      final keys = value.keys.cast<String>().toList()..sort();
+      return {for (final key in keys) key: _canonical(value[key])};
+    }
+    if (value is List) return value.map(_canonical).toList();
+    return value;
+  }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'id': id,
@@ -286,6 +313,9 @@ class GameMod {
     'palette': palette.map(_colorToHex).toList(growable: false),
     'neutralColor': _colorToHex(neutralColor),
     'waterColor': _colorToHex(waterColor),
+    if (sprites.isNotEmpty) 'sprites': sprites,
+    if (author.isNotEmpty) 'author': author,
+    if (description.isNotEmpty) 'description': description,
   };
 
   static Future<GameMod> loadDefault() =>
@@ -329,16 +359,65 @@ class GameMod {
           return _parseColor(value);
         })
         .toList(growable: false);
-    return GameMod(
+    if (palette.length > 15 ||
+        name.length > 80 ||
+        title.length > 80 ||
+        id.length > 64) {
+      throw const FormatException('Мод атауы немесе палитрасы тым үлкен.');
+    }
+    final sprites = <String, String>{};
+    final rawSprites = json['sprites'] ?? const <String, String>{};
+    if (rawSprites is! Map || rawSprites.length > spriteNames.length) {
+      throw const FormatException('Мод суреттері жарамсыз.');
+    }
+    var spriteBytes = 0;
+    for (final entry in rawSprites.entries) {
+      if (!spriteNames.contains(entry.key) ||
+          entry.value is! String ||
+          (entry.value as String).length > 700000) {
+        throw const FormatException('Сурет атауы не көлемі жарамсыз.');
+      }
+      final bytes = base64Decode(entry.value as String);
+      spriteBytes += bytes.length;
+      if (spriteBytes > 4 * 1024 * 1024 ||
+          bytes.length < 24 ||
+          bytes[0] != 137 ||
+          utf8.decode(bytes.sublist(1, 4), allowMalformed: true) != 'PNG') {
+        throw const FormatException(
+          'Мод суреттері PNG, жалпы 4 МБ-қа дейін болуы керек.',
+        );
+      }
+      final header = ByteData.sublistView(bytes);
+      final width = header.getUint32(16);
+      final height = header.getUint32(20);
+      if (width < 1 || height < 1 || width > 512 || height > 512) {
+        throw const FormatException('PNG өлшемі 1–512 пиксель болуы керек.');
+      }
+      sprites[entry.key as String] = entry.value as String;
+    }
+    String text(String key, int limit) {
+      final value = json[key] ?? '';
+      if (value is! String || value.length > limit) {
+        throw FormatException('Модтың $key өрісі жарамсыз.');
+      }
+      return value;
+    }
+
+    final mod = GameMod(
       id: id,
       name: name,
       title: title,
       version: version,
       rules: GameRules.fromJson(rules.cast<String, dynamic>()),
-      palette: palette,
+      palette: List.unmodifiable(palette),
       neutralColor: _parseColor(neutralColor),
       waterColor: _parseColor(waterColor),
+      sprites: Map.unmodifiable(sprites),
+      author: text('author', 80),
+      description: text('description', 1000),
     );
+    _fingerprints[mod] = mod.fingerprint;
+    return mod;
   }
 
   static Color _parseColor(String value) {
@@ -351,4 +430,45 @@ class GameMod {
 
   static String _colorToHex(Color color) =>
       '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
+
+  static const spriteNames = <String>{
+    'selection',
+    'selection_pixel',
+    'man0',
+    'man1',
+    'man2',
+    'man3',
+    'castle',
+    'house',
+    'farm1',
+    'tower',
+    'strong_tower',
+    'pine',
+    'palm',
+    'grave',
+    'port1',
+    'port2',
+    'boat1',
+    'boat2',
+    'sea_mint',
+    'sea_fort',
+    'artillery',
+    'artillery_base',
+    'artillery_turret',
+    'man0_team',
+    'man1_team',
+    'man2_team',
+    'man3_team',
+    'castle_team',
+    'farm1_team',
+    'tower_team',
+    'strong_tower_team',
+    'port1_team',
+    'port2_team',
+    'boat1_team',
+    'boat2_team',
+    'naval_supply_link',
+    'exclamation_mark',
+    'diplomacy_black_mark',
+  };
 }

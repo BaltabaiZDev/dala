@@ -30,6 +30,7 @@ class MapRasterCache extends ChangeNotifier {
   final void Function(VoidCallback) _schedule;
   ui.Picture? _picture;
   ui.Picture? _overviewPicture;
+  void Function(ui.Canvas, ui.Rect)? _recordRegion;
   int? _signature;
   ui.Size _size = ui.Size.zero;
   ui.Rect _view = ui.Rect.zero;
@@ -100,13 +101,23 @@ class MapRasterCache extends ChangeNotifier {
     ui.Size? size,
     bool rasterize = false,
     void Function(ui.Canvas)? recordOverview,
+    void Function(ui.Canvas, ui.Rect)? recordRegion,
+    List<ui.Rect>? Function()? changedRegions,
   }) {
     if (_disposed) return;
     final nextSize = size ?? ui.Size.zero;
     if (_picture == null || signature != _signature || nextSize != _size) {
+      final dirty = _picture != null && nextSize == _size
+          ? changedRegions?.call()
+          : null;
+      if (_picture == null || nextSize != _size) changedRegions?.call();
       final recorder = ui.PictureRecorder();
-      record(ui.Canvas(recorder));
+      final recordingCanvas = ui.Canvas(recorder);
+      // Large terrain is recorded by visible region only when a detail job
+      // needs it. Never synchronously record thousands of offscreen objects.
+      if (!rasterize || recordRegion == null) record(recordingCanvas);
       final next = recorder.endRecording();
+      _recordRegion = rasterize ? recordRegion : null;
       _epoch++;
       _picture?.dispose();
       _picture = next;
@@ -120,7 +131,20 @@ class MapRasterCache extends ChangeNotifier {
       _signature = signature;
       _size = nextSize;
       builds++;
-      _clearTextures();
+      if (dirty == null) {
+        _clearTextures();
+      } else {
+        _overview?.image.dispose();
+        _overview = null;
+        for (final key in _tiles.keys.toList()) {
+          final tile = _tiles[key]!;
+          if (dirty.any((rect) => rect.overlaps(tile.rect.inflate(2)))) {
+            _tiles.remove(key);
+            _detailBytes -= tile.bytes;
+            tile.image.dispose();
+          }
+        }
+      }
     }
     _rasterEnabled = rasterize && !_size.isEmpty;
     final overview = _overview;
@@ -240,7 +264,13 @@ class MapRasterCache extends ChangeNotifier {
     canvas.drawColor(backgroundColor, ui.BlendMode.src);
     canvas.translate(gutter - rect.left * scale, gutter - rect.top * scale);
     canvas.scale(scale);
-    canvas.drawPicture(key == null ? _overviewPicture ?? _picture! : _picture!);
+    if (key != null && _recordRegion != null) {
+      _recordRegion!(canvas, rect.inflate(2 / scale));
+    } else {
+      canvas.drawPicture(
+        key == null ? _overviewPicture ?? _picture! : _picture!,
+      );
+    }
     final picture = recorder.endRecording();
     final watch = Stopwatch()..start();
     try {
@@ -304,6 +334,7 @@ class MapRasterCache extends ChangeNotifier {
     _picture = null;
     _overviewPicture?.dispose();
     _overviewPicture = null;
+    _recordRegion = null;
     _clearTextures();
     super.dispose();
   }

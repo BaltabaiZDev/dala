@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'content_package_test.dart' show MemoryContentStorage;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -33,7 +34,7 @@ void main() {
       MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: DalaTheme.light,
-        home: HomeScreen(gameMod: mod, saves: SaveRepository()),
+        home: HomeScreen(gameMod: mod, saves: SaveRepository(), contentStorage: MemoryContentStorage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -121,7 +122,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: DalaTheme.light,
-        home: HomeScreen(gameMod: mod, saves: SaveRepository()),
+        home: HomeScreen(gameMod: mod, saves: SaveRepository(), contentStorage: MemoryContentStorage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -168,7 +169,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: DalaTheme.light,
-        home: HomeScreen(gameMod: mod, saves: SaveRepository()),
+        home: HomeScreen(gameMod: mod, saves: SaveRepository(), contentStorage: MemoryContentStorage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -202,7 +203,7 @@ void main() {
       MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: DalaTheme.light,
-        home: HomeScreen(gameMod: mod, saves: SaveRepository()),
+        home: HomeScreen(gameMod: mod, saves: SaveRepository(), contentStorage: MemoryContentStorage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -265,7 +266,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: DalaTheme.light,
-        home: HomeScreen(gameMod: mod, saves: SaveRepository()),
+        home: HomeScreen(gameMod: mod, saves: SaveRepository(), contentStorage: MemoryContentStorage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -297,7 +298,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: DalaTheme.light,
-        home: HomeScreen(gameMod: mod, saves: SaveRepository()),
+        home: HomeScreen(gameMod: mod, saves: SaveRepository(), contentStorage: MemoryContentStorage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -319,7 +320,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: DalaTheme.light,
-        home: HomeScreen(gameMod: mod, saves: SaveRepository()),
+        home: HomeScreen(gameMod: mod, saves: SaveRepository(), contentStorage: MemoryContentStorage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -342,7 +343,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: DalaTheme.light,
-        home: HomeScreen(gameMod: mod, saves: SaveRepository()),
+        home: HomeScreen(gameMod: mod, saves: SaveRepository(), contentStorage: MemoryContentStorage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -371,7 +372,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: DalaTheme.light,
-        home: HomeScreen(gameMod: mod, saves: SaveRepository()),
+        home: HomeScreen(gameMod: mod, saves: SaveRepository(), contentStorage: MemoryContentStorage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -412,7 +413,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: DalaTheme.light,
-        home: HomeScreen(gameMod: mod, saves: SaveRepository()),
+        home: HomeScreen(gameMod: mod, saves: SaveRepository(), contentStorage: MemoryContentStorage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -447,7 +448,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: DalaTheme.light,
-        home: HomeScreen(gameMod: mod, saves: SaveRepository()),
+        home: HomeScreen(gameMod: mod, saves: SaveRepository(), contentStorage: MemoryContentStorage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -474,7 +475,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: DalaTheme.light,
-        home: HomeScreen(gameMod: mod, saves: SaveRepository()),
+        home: HomeScreen(gameMod: mod, saves: SaveRepository(), contentStorage: MemoryContentStorage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -498,7 +499,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: DalaTheme.light,
-        home: HomeScreen(gameMod: mod, saves: SaveRepository()),
+        home: HomeScreen(gameMod: mod, saves: SaveRepository(), contentStorage: MemoryContentStorage()),
       ),
     );
     await tester.pumpAndSettle();

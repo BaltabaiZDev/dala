@@ -13,6 +13,7 @@ import '../lan/lan_room_client.dart';
 import '../lan/lan_room_host.dart';
 import '../lan/lan_server_factory.dart';
 import '../modding/game_mod.dart';
+import '../modding/content_library.dart';
 import '../persistence/save_repository.dart';
 import '../persistence/settings_repository.dart';
 import 'antiyoy_background.dart';
@@ -27,10 +28,14 @@ class LanScreen extends StatefulWidget {
     required this.mod,
     required this.saves,
     required this.pickConfig,
+    this.defaultMod,
+    this.library,
     super.key,
   });
 
   final GameMod mod;
+  final GameMod? defaultMod;
+  final ContentLibrary? library;
   final SaveRepository saves;
   final LanConfigPicker pickConfig;
 
@@ -43,10 +48,16 @@ class _LanScreenState extends State<LanScreen> {
   final TextEditingController _address = TextEditingController();
   final TextEditingController _roomCode = TextEditingController();
   bool _working = false;
+  late bool _useMod;
+  GameMod? _selectedMod;
+  InstalledMap? _selectedMap;
+  GameMod get _roomMod =>
+      _useMod ? _selectedMod ?? widget.mod : widget.defaultMod ?? widget.mod;
 
   @override
   void initState() {
     super.initState();
+    _useMod = widget.mod.id != 'classic_steppe';
     final browserHost = Uri.base.host;
     _address.text = browserHost.isNotEmpty && browserHost != 'localhost'
         ? '$browserHost:$lanDefaultPort'
@@ -70,12 +81,25 @@ class _LanScreenState extends State<LanScreen> {
       );
       return;
     }
-    final selected = await widget.pickConfig(context);
+    final roomMod = _roomMod;
+    GameState? mapState;
+    try {
+      mapState = _selectedMap?.map.createState(roomMod, multiplayer: true);
+    } on Object catch (error) {
+      showTopSnackBar(context, 'Карта ашылмады: $error');
+      return;
+    }
+    final selected = mapState?.config ?? await widget.pickConfig(context);
     if (!mounted || selected == null) return;
     final configJson = selected.toJson();
     configJson['humanCount'] = math.max(2, selected.humanCount);
     final config = GameConfig.fromJson(configJson);
-    final host = LanRoomHost(config: config, hostName: _name.text);
+    final host = LanRoomHost(
+      config: config,
+      hostName: _name.text,
+      mod: roomMod,
+      mapName: _selectedMap?.map.name,
+    );
     setState(() => _working = true);
     try {
       await runWithAntiyoyLoader(
@@ -89,8 +113,12 @@ class _LanScreenState extends State<LanScreen> {
       }
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
-          builder: (_) =>
-              _LanHostLobby(host: host, mod: widget.mod, saves: widget.saves),
+          builder: (_) => _LanHostLobby(
+            host: host,
+            mod: roomMod,
+            saves: widget.saves,
+            initialState: mapState,
+          ),
         ),
       );
     } catch (exception) {
@@ -159,13 +187,87 @@ class _LanScreenState extends State<LanScreen> {
                   label: 'Атыңыз',
                 ),
                 const SizedBox(height: 18),
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('Кәдімгі')),
+                    ButtonSegment(value: true, label: Text('Модпен')),
+                  ],
+                  selected: {_useMod},
+                  onSelectionChanged: _working
+                      ? null
+                      : (value) => setState(() {
+                          _useMod = value.single;
+                          _selectedMap = null;
+                        }),
+                ),
+                if (_useMod) ...[
+                  const SizedBox(height: 10),
+                  if (widget.library?.mods.isNotEmpty ?? false)
+                    DropdownButtonFormField<GameMod>(
+                      initialValue: _roomMod.id == 'classic_steppe'
+                          ? null
+                          : _roomMod,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Бөлме моды',
+                      ),
+                      items: [
+                        for (final entry in widget.library!.mods)
+                          DropdownMenuItem(
+                            value: entry.mod,
+                            child: Text(
+                              entry.mod.name,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: _working
+                          ? null
+                          : (value) => setState(() {
+                              _selectedMod = value;
+                              _selectedMap = null;
+                            }),
+                    )
+                  else
+                    const Text(
+                      'Алдымен «Модтар мен карталар» бөлімінде мод орнатыңыз.',
+                    ),
+                ],
+                const SizedBox(height: 10),
+                DropdownButtonFormField<InstalledMap?>(
+                  key: ValueKey((_roomMod.fingerprint, _useMod)),
+                  initialValue: _selectedMap,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Карта'),
+                  items: [
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text('Кездейсоқ карта'),
+                    ),
+                    for (final entry
+                        in widget.library?.maps ?? <InstalledMap>[])
+                      if (widget.library!.modForMap(entry)?.fingerprint ==
+                          _roomMod.fingerprint)
+                        DropdownMenuItem(
+                          value: entry,
+                          child: Text(
+                            entry.map.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                  ],
+                  onChanged: _working
+                      ? null
+                      : (value) => setState(() => _selectedMap = value),
+                ),
+                const SizedBox(height: 18),
                 _LanActionBand(
                   key: const ValueKey('lan-host-button'),
-                  label: lanHostingSupported
-                      ? 'Бөлме ашу'
-                      : 'Бөлме ашу · native керек',
+                  label: 'Бөлме ашу',
                   color: DalaTheme.green,
-                  enabled: !_working,
+                  enabled:
+                      !_working &&
+                      (!_useMod || _roomMod.id != 'classic_steppe'),
                   onTap: _host,
                 ),
                 const Padding(
@@ -221,11 +323,13 @@ class _LanHostLobby extends StatefulWidget {
     required this.host,
     required this.mod,
     required this.saves,
+    this.initialState,
   });
 
   final LanRoomHost host;
   final GameMod mod;
   final SaveRepository saves;
+  final GameState? initialState;
 
   @override
   State<_LanHostLobby> createState() => _LanHostLobbyState();
@@ -248,7 +352,9 @@ class _LanHostLobbyState extends State<_LanHostLobby> {
     final initialState = await runWithAntiyoyLoader(
       context,
       semanticsLabel: 'LAN картасы жасалуда',
-      task: () => generateMapAsync(widget.mod, widget.host.config),
+      task: () async => widget.initialState == null
+          ? await generateMapAsync(widget.mod, widget.host.config)
+          : GameState.fromJson(widget.initialState!.toJson()),
     );
     if (!mounted) return;
     final entrySnapshot = GameState.fromJson(initialState.toJson());
@@ -304,6 +410,10 @@ class _LanHostLobbyState extends State<_LanHostLobby> {
             _LanPanel(
               child: Column(
                 children: [
+                  Text(
+                    '${host.lobby.modded ? 'Модпен' : 'Кәдімгі'} · ${host.lobby.modName}',
+                  ),
+                  if (host.mapName != null) Text('Карта: ${host.mapName}'),
                   const Text('Бөлме коды', style: TextStyle(fontSize: 15)),
                   SelectableText(
                     host.roomCode,
@@ -489,8 +599,18 @@ class _LanClientLobbyState extends State<_LanClientLobby> {
     if (!mounted || stateJson == null || widget.client.seat < 0) return;
     final settings = await const SettingsRepository().load();
     if (!mounted) return;
+    try {
+      await ContentLibrary.validateImages(widget.client.sessionMod!);
+    } on Object {
+      if (mounted) {
+        showTopSnackBar(context, 'Хост модының суреттері жарамсыз.');
+        Navigator.pop(context);
+      }
+      return;
+    }
+    if (!mounted) return;
     final controller = GameController(
-      mod: widget.mod,
+      mod: widget.client.sessionMod!,
       state: GameState.fromJson(stateJson),
       saves: widget.saves,
       autosaveEnabled: false,
@@ -556,12 +676,20 @@ class _LanClientLobbyState extends State<_LanClientLobby> {
                   ),
                 ],
                 if (lobby != null) ...[
+                  Text(
+                    "${lobby.modded ? 'Модпен' : 'Кәдімгі'} · ${lobby.modName}",
+                  ),
+                  if (lobby.mapName != null) Text('Карта: ${lobby.mapName}'),
                   const SizedBox(height: 14),
                   for (var seat = 0; seat < lobby.config.humanCount; seat++)
                     _ClientSeatRow(
                       seat: seat,
                       color:
-                          widget.mod.palette[seat % widget.mod.palette.length],
+                          (widget.client.sessionMod ?? widget.mod)
+                              .palette[seat %
+                              (widget.client.sessionMod ?? widget.mod)
+                                  .palette
+                                  .length],
                       participant: lobby.participants
                           .where((participant) => participant.seat == seat)
                           .firstOrNull,
