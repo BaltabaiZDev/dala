@@ -25,6 +25,10 @@ const radar = 'my_dala_mod.radar';
 const airfield = 'my_dala_mod.airfield';
 const aircraft = 'my_dala_mod.aircraft';
 const scout = 'my_dala_mod.scout';
+const barracks = 'my_dala_mod.barracks';
+
+List<dynamic> aircraftDefinitions(Map<String, dynamic> json) =>
+    (json['buildings'] as List)[1]['production'] as List;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -44,11 +48,11 @@ void main() {
         (j) => (j['buildings'] as List).first['id'] = 'other.radar',
         (j) =>
             (j['buildings'] as List).first['id'] = 'my_dala_mod.airfield_team',
-        (j) => (j['units'] as List).last['requiresBuilding'] =
+        (j) => aircraftDefinitions(j).single['requiresBuilding'] =
             'my_dala_mod.missing',
-        (j) => (j['units'] as List).last['strength'] = 5,
-        (j) => (j['units'] as List).last['execute'] = 'anything',
-        (j) => (j['units'] as List).add((j['units'] as List).first),
+        (j) => aircraftDefinitions(j).single['strength'] = 5,
+        (j) => aircraftDefinitions(j).single['execute'] = 'anything',
+        (j) => aircraftDefinitions(j).add(aircraftDefinitions(j).first),
       ]) {
         final json =
             jsonDecode(jsonEncode(mod.toJson())) as Map<String, dynamic>;
@@ -106,6 +110,14 @@ void main() {
       expect(engine.state.hexes[site].airUnit!.ready, isFalse);
       expect(engine.airMoveTargets(site), isEmpty);
       expect(engine.economicBreakdown(home).modUpkeep, -6);
+      expect(
+        engine.buildModType(
+          home.id,
+          engine.modBuildTargets(home.id, barracks).first,
+          barracks,
+        ),
+        isTrue,
+      );
       final unitSite = engine.modBuildTargets(home.id, scout).first;
       expect(engine.buildModType(home.id, unitSite, scout), isTrue);
       expect(engine.economicBreakdown(home).landUnits, -2);
@@ -258,6 +270,11 @@ void main() {
     () {
       final engine = modFixture(mod);
       final home = engine.provincesOf(0).first;
+      engine.buildModType(
+        home.id,
+        engine.modBuildTargets(home.id, barracks).first,
+        barracks,
+      );
       final from = engine.modBuildTargets(home.id, scout).first;
       engine.buildModType(home.id, from, scout);
       final unit = engine.state.hexes[from].unit!..ready = true;
@@ -373,7 +390,7 @@ void main() {
 
   test('native scouting spots for aircraft and undo restores the strike', () {
     final json = mod.toJson();
-    (json['units'] as List).last['vision'] = 0;
+    aircraftDefinitions(json).single['vision'] = 0;
     final shortSight = GameMod.fromJson(json);
     final engine = modFixture(shortSight);
     engine.setDiplomacyStatus(0, 1, DiplomacyStatus.war);
@@ -458,7 +475,7 @@ void main() {
       File('${folder.path}/mod.json').writeAsStringSync(
         const JsonEncoder.withIndent('  ').convert({
           'format': 'dala-mod',
-          'version': 2,
+          'version': 3,
           'mod': mod.toJson()..remove('sprites'),
         }),
       );

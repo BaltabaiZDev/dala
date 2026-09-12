@@ -659,5 +659,11 @@
   "Мод табысы": "Mod prihod",
   "Мод шығыны": "Mod održavanje",
   "Модтар жаңа ғимарат, құрлық әскері және ұшақ түрлерін қосады. Бағасын, шығынын, қозғалысын, қорғанысын және көру радиусын өзгертуге болады.": "Modovi dodaju nove zgrade, kopnene jedinice i zrakoplove. Postavite njihovu cijenu, održavanje, kretanje, obranu i raspon vida.",
-  "Үлгіде радар, аэродром, барлаушы және ұшақ бар. Ережелер JSON арқылы беріледі; орындалатын скрипттер қосылмайды.": "Primjer uključuje radar, uzletište, izviđač i zrakoplov. Pravila koriste JSON; izvršne skripte nisu podržane."
+  "Үлгіде радар, аэродром, барлаушы және ұшақ бар. Ережелер JSON арқылы беріледі; орындалатын скрипттер қосылмайды.": "Primjer uključuje radar, uzletište, izviđač i zrakoplov. Pravila koriste JSON; izvršne skripte nisu podržane.",
+  "Құрылыс": "Gradnja",
+  "Өндіріс": "Proizvodnja",
+  "Сипаттама": "Pojedinosti",
+  "Орын жоқ": "Nema mjesta",
+  "Қазір қолжетімсіз": "Trenutačno nedostupno",
+  "Ақша жетпейді": "Nema dovoljno novca"
 }

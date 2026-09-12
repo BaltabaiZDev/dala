@@ -125,7 +125,7 @@ void main() {
     controller.tapTile(home.capital);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
-    await tester.tap(find.byTooltip('Мод нысандары'));
+    await tester.tap(find.byTooltip('Құрылыс'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     expect(
@@ -292,4 +292,126 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsNothing);
   });
+
+  testWidgets(
+    'airfield opens only its aircraft and launches from that airfield',
+    (tester) async {
+      phone(tester, width: 320);
+      final engine = fixture.modFixture(mod);
+      final home = engine.provincesOf(0).first;
+      final first = engine.modBuildTargets(home.id, fixture.airfield).first;
+      engine.buildModType(home.id, first, fixture.airfield);
+      final second = engine.modBuildTargets(home.id, fixture.airfield).last;
+      engine.buildModType(home.id, second, fixture.airfield);
+      final controller = GameController(
+        mod: mod,
+        state: engine.state,
+        saves: SaveRepository(),
+        autosaveEnabled: false,
+        authoritativeSimulation: false,
+      );
+      await tester.pumpWidget(
+        shell(GameScreen(controller: controller), textScale: 1.3),
+      );
+      controller.tapTile(first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(find.byType(ModBuildingPanel), findsOneWidget);
+      expect(find.text('Модтар'), findsNothing);
+      await capture(tester, 'airfield-production-320');
+      await tester.tap(find.byTooltip('Әскер'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(
+        find.byKey(const ValueKey('mod-type-my_dala_mod.aircraft')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('mod-type-my_dala_mod.radar')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('mod-type-my_dala_mod.scout')),
+        findsNothing,
+      );
+      await capture(tester, 'airfield-catalog-320');
+      await tester.tap(
+        find.byKey(const ValueKey('mod-type-my_dala_mod.aircraft')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(controller.selectedTile, first);
+      expect(controller.targetTiles, isNot(contains(second)));
+      final before = home.money;
+      await tester.tapAt(pointFor(tester, first));
+      await tester.pump();
+      expect(controller.state.hexes[first].airUnit?.typeId, fixture.aircraft);
+      expect(home.money, before - 40);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'long production names stay compact and full details remain accessible',
+    (tester) async {
+      phone(tester, width: 320);
+      final json = mod.toJson();
+      final products = (json['buildings'] as List)[1]['production'] as List;
+      products.clear();
+      for (var i = 0; i < 32; i++) {
+        products.add(
+          ModUnitType(
+            id: 'my_dala_mod.plane$i',
+            name: 'Long aircraft designation with extended equipment number $i',
+            price: 40,
+            movement: ModMovement.air,
+          ).toJson(),
+        );
+      }
+      final many = GameMod.fromJson(json);
+      await tester.pumpWidget(
+        shell(
+          Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => showModTypeMenu(
+                  context,
+                  many,
+                  typeIds: many.buildings[fixture.airfield]!.production.map(
+                    (u) => u.id,
+                  ),
+                  title: 'Аэродром',
+                ),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+          textScale: 1.3,
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      final first = find.byKey(const ValueKey('mod-type-my_dala_mod.plane0'));
+      expect(tester.getSize(first).height, lessThan(105));
+      expect(find.byType(TextField), findsOneWidget);
+      await capture(tester, 'long-production-320');
+      await tester.tap(
+        find.byKey(const ValueKey('mod-info-my_dala_mod.plane0')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.text('Өндіріс: Аэродром'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'Жабу'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'number 31');
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('mod-type-my_dala_mod.plane31')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 }

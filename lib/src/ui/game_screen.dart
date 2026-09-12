@@ -136,6 +136,8 @@ class _GameScreenState extends State<GameScreen> {
               ? 66.0
               : controller.selectedArtilleryLevel > 0
               ? 66.0
+              : controller.selectedModBuilding != null
+              ? 66.0
               : controller.state.config.slayRules
               ? 60.0
               : narrowGroundPanel
@@ -264,6 +266,8 @@ class _GameScreenState extends State<GameScreen> {
                               key: const ValueKey('artillery-management'),
                               controller: controller,
                             )
+                          : controller.selectedModBuilding != null
+                          ? ModBuildingPanel(controller: controller)
                           : _FastConstructionPanel(
                               key: const ValueKey('ground-construction'),
                               controller: controller,
@@ -1264,6 +1268,8 @@ class _FastConstructionPanel extends StatelessWidget {
         ? rules.farmBasePrice
         : controller.engine.farmPrice(province);
     final structures = <Widget>[
+      if (controller.mod.buildings.isNotEmpty)
+        ModCatalogButton(controller: controller, buildings: true),
       if (!controller.state.config.slayRules)
         _FastBuildItem(
           label: 'Ферма',
@@ -1314,9 +1320,8 @@ class _FastConstructionPanel extends StatelessWidget {
       ),
     ];
     final units = <Widget>[
-      if (controller.mod.buildings.isNotEmpty ||
-          controller.mod.units.isNotEmpty)
-        ModBuildButton(controller: controller),
+      if (modProductionTypes(controller).isNotEmpty)
+        ModCatalogButton(controller: controller),
       for (var strength = 1; strength <= 4; strength++)
         _FastBuildItem(
           label: '$strength-деңгейлі әскер',
@@ -1336,7 +1341,21 @@ class _FastConstructionPanel extends StatelessWidget {
 
     Widget itemRow(List<Widget> items, Color color) => ColoredBox(
       color: color,
-      child: Row(children: [for (final item in items) Expanded(child: item)]),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth / items.length >= 48) {
+            return Row(
+              children: [for (final item in items) Expanded(child: item)],
+            );
+          }
+          return ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              for (final item in items) SizedBox(width: 52, child: item),
+            ],
+          );
+        },
+      ),
     );
 
     return LayoutBuilder(

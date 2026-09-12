@@ -90,13 +90,13 @@ class ContentPackage {
         }
       }
       final manifest = files['mod.json'];
-      if (manifest == null || manifest.size > 256 * 1024) {
+      if (manifest == null || manifest.size > 1024 * 1024) {
         throw const FormatException('Пакеттің түбінде mod.json болуы керек.');
       }
       final root = jsonDecode(utf8.decode(manifest.content));
       if (root is! Map ||
           root['format'] != 'dala-mod' ||
-          !const [1, 2].contains(root['version']) ||
+          !const [1, 2, 3].contains(root['version']) ||
           root['mod'] is! Map) {
         throw const FormatException('Бұл DALA мод пакеті емес.');
       }
@@ -154,7 +154,11 @@ class ContentPackage {
         utf8.encode(
           jsonEncode({
             'format': 'dala-mod',
-            'version': mod.buildings.isEmpty && mod.units.isEmpty ? 1 : 2,
+            'version': mod.buildings.values.any((b) => b.production.isNotEmpty)
+                ? 3
+                : mod.buildings.isEmpty && mod.units.isEmpty
+                ? 1
+                : 2,
             'mod': raw,
           }),
         ),

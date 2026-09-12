@@ -1,11 +1,11 @@
 {
   "format": "dala-mod",
-  "version": 2,
+  "version": 3,
   "mod": {
     "id": "my_dala_mod",
     "name": "Дала технологиялары",
     "title": "DALA",
-    "version": 1,
+    "version": 2,
     "rules": {
       "unitMoveLimit": 4,
       "unitPricePerLevel": 10,
@@ -82,7 +82,7 @@
     "neutralColor": "#d4d5b8",
     "waterColor": "#669ea9",
     "author": "Мод авторы",
-    "description": "Радар, аэродром, барлаушы және ұшақ. mod.json арқылы өз түрлеріңізді қосыңыз.",
+    "description": "Радар, аэродром және казарма. Әр ғимараттың production тізіміне өз әскеріңізді қосыңыз.",
     "buildings": [
       {
         "id": "my_dala_mod.radar",
@@ -102,34 +102,45 @@
         "income": 0,
         "defense": 1,
         "vision": 2,
+        "production": [
+          {
+            "id": "my_dala_mod.aircraft",
+            "name": "Ұшақ",
+            "price": 40,
+            "upkeep": 4,
+            "strength": 3,
+            "moveRange": 8,
+            "vision": 5,
+            "movement": "air",
+            "attackRange": 2,
+            "icon": "aircraft"
+          }
+        ],
         "icon": "airfield"
-      }
-    ],
-    "units": [
-      {
-        "id": "my_dala_mod.scout",
-        "name": "Барлаушы",
-        "price": 15,
-        "upkeep": 2,
-        "strength": 1,
-        "moveRange": 6,
-        "vision": 4,
-        "movement": "land",
-        "attackRange": 0,
-        "icon": "scout"
       },
       {
-        "id": "my_dala_mod.aircraft",
-        "name": "Ұшақ",
-        "price": 40,
-        "upkeep": 4,
-        "strength": 3,
-        "moveRange": 8,
-        "vision": 5,
-        "movement": "air",
-        "attackRange": 2,
-        "requiresBuilding": "my_dala_mod.airfield",
-        "icon": "aircraft"
+        "id": "my_dala_mod.barracks",
+        "name": "Казарма",
+        "price": 25,
+        "upkeep": 1,
+        "income": 0,
+        "defense": 1,
+        "vision": 0,
+        "production": [
+          {
+            "id": "my_dala_mod.scout",
+            "name": "Барлаушы",
+            "price": 15,
+            "upkeep": 2,
+            "strength": 1,
+            "moveRange": 6,
+            "vision": 4,
+            "movement": "land",
+            "attackRange": 0,
+            "icon": "scout"
+          }
+        ],
+        "icon": "building"
       }
     ]
   }

@@ -659,5 +659,11 @@
   "Мод табысы": "Pendapatan mod",
   "Мод шығыны": "Pemeliharaan Mod",
   "Модтар жаңа ғимарат, құрлық әскері және ұшақ түрлерін қосады. Бағасын, шығынын, қозғалысын, қорғанысын және көру радиусын өзгертуге болады.": "Modifikasi  menambahkan bangunan baru, unit darat, dan pesawat terbang. Tetapkan harga, pemeliharaan, pergerakan, pertahanan, dan jangkauan penglihatannya.",
-  "Үлгіде радар, аэродром, барлаушы және ұшақ бар. Ережелер JSON арқылы беріледі; орындалатын скрипттер қосылмайды.": "Contohnya meliputi radar, lapangan terbang, pengintai dan pesawat terbang. Aturan menggunakan JSON; skrip yang dapat dieksekusi tidak didukung."
+  "Үлгіде радар, аэродром, барлаушы және ұшақ бар. Ережелер JSON арқылы беріледі; орындалатын скрипттер қосылмайды.": "Contohnya meliputi radar, lapangan terbang, pengintai dan pesawat terbang. Aturan menggunakan JSON; skrip yang dapat dieksekusi tidak didukung.",
+  "Құрылыс": "Pembangunan",
+  "Өндіріс": "Produksi",
+  "Сипаттама": "Detail",
+  "Орын жоқ": "Tidak ada tempat",
+  "Қазір қолжетімсіз": "Saat ini tidak tersedia",
+  "Ақша жетпейді": "Uang tidak cukup"
 }

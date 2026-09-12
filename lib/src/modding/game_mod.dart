@@ -389,8 +389,18 @@ class GameMod {
       'components': components.map((m) => m.toJson()).toList(),
     if (buildings.isNotEmpty)
       'buildings': buildings.values.map((v) => v.toJson()).toList(),
-    if (units.isNotEmpty) 'units': units.values.map((v) => v.toJson()).toList(),
+    if (externalUnits.isNotEmpty)
+      'units': externalUnits.map((v) => v.toJson()).toList(),
   };
+
+  /// Preserve old flat manifests, but don't duplicate a building's products.
+  Iterable<ModUnitType> get externalUnits {
+    final nestedIds = buildings.values
+        .expand((b) => b.production)
+        .map((u) => u.id)
+        .toSet();
+    return units.values.where((u) => !nestedIds.contains(u.id));
+  }
 
   static Future<GameMod> loadDefault() =>
       loadAsset('assets/mods/default_mod.json');
@@ -444,11 +454,22 @@ class GameMod {
       ModBuilding.fromJson,
       (v) => v.id,
     );
-    final units = readModTypes(
-      json['units'],
-      ModUnitType.fromJson,
-      (v) => v.id,
+    final units = Map<String, ModUnitType>.of(
+      readModTypes(
+        json['units'],
+        ModUnitType.fromJson,
+        (v) => v.id,
+        limit: 33 * 32,
+      ),
     );
+    for (final building in buildings.values) {
+      for (final product in building.production) {
+        if (units.containsKey(product.id)) {
+          throw FormatException('Duplicate mod type: ${product.id}');
+        }
+        units[product.id] = product;
+      }
+    }
     final components = ModReference.readList(json['components']);
     final namespaces = components.isEmpty
         ? {id}
@@ -459,7 +480,18 @@ class GameMod {
         typeIds.any((key) => !namespaces.contains(key.split('.').first))) {
       throw const FormatException('Mod type ids must belong to their package.');
     }
+    final productCounts = <String?, int>{};
     for (final unit in units.values) {
+      final count = productCounts.update(
+        unit.requiresBuilding,
+        (n) => n + 1,
+        ifAbsent: () => 1,
+      );
+      if (count > 32) {
+        throw const FormatException(
+          'At most 32 products per production building.',
+        );
+      }
       if (unit.requiresBuilding != null &&
           !buildings.containsKey(unit.requiresBuilding)) {
         throw FormatException(
@@ -524,7 +556,7 @@ class GameMod {
       description: text('description', 1000),
       components: components,
       buildings: buildings,
-      units: units,
+      units: Map.unmodifiable(units),
     );
     _fingerprints[mod] = mod.fingerprint;
     return mod;

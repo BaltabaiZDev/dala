@@ -659,5 +659,11 @@
   "Мод табысы": "Mod geliri",
   "Мод шығыны": "Mod bakımı",
   "Модтар жаңа ғимарат, құрлық әскері және ұшақ түрлерін қосады. Бағасын, шығынын, қозғалысын, қорғанысын және көру радиусын өзгертуге болады.": "Modlar yeni binalar, kara birimleri ve uçaklar ekler. Fiyatlarını, bakımlarını, hareketlerini, savunmalarını ve görüş aralıklarını belirleyin.",
-  "Үлгіде радар, аэродром, барлаушы және ұшақ бар. Ережелер JSON арқылы беріледі; орындалатын скрипттер қосылмайды.": "Örnekte radar, havaalanı, izci ve uçak yer alıyor. Kurallar JSON'u kullanır; yürütülebilir komut dosyaları desteklenmez."
+  "Үлгіде радар, аэродром, барлаушы және ұшақ бар. Ережелер JSON арқылы беріледі; орындалатын скрипттер қосылмайды.": "Örnekte radar, havaalanı, izci ve uçak yer alıyor. Kurallar JSON'u kullanır; yürütülebilir komut dosyaları desteklenmez.",
+  "Құрылыс": "İnşaat",
+  "Өндіріс": "Üretim",
+  "Сипаттама": "Ayrıntılar",
+  "Орын жоқ": "Yer yok",
+  "Қазір қолжетімсіз": "Şu anda kullanılamıyor",
+  "Ақша жетпейді": "Yetersiz para"
 }

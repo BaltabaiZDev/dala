@@ -11,6 +11,7 @@ class ModBuilding {
     this.income = 0,
     this.defense = 0,
     this.vision = 0,
+    this.production = const [],
     this.icon = 'building',
   });
   final String id;
@@ -20,6 +21,7 @@ class ModBuilding {
   final int income;
   final int defense;
   final int vision;
+  final List<ModUnitType> production;
   final String icon;
 
   Map<String, dynamic> toJson() => {
@@ -30,6 +32,11 @@ class ModBuilding {
     'income': income,
     'defense': defense,
     'vision': vision,
+    if (production.isNotEmpty)
+      'production': [
+        for (final unit in production)
+          unit.toJson()..remove('requiresBuilding'),
+      ],
     'icon': icon,
   };
 
@@ -42,6 +49,7 @@ class ModBuilding {
       'income',
       'defense',
       'vision',
+      'production',
       'icon',
     });
     return ModBuilding(
@@ -52,6 +60,17 @@ class ModBuilding {
       income: _integer(json, 'income', 0, 1000000, fallback: 0),
       defense: _integer(json, 'defense', 0, 3, fallback: 0),
       vision: _integer(json, 'vision', 0, 12, fallback: 0),
+      production: List.unmodifiable(
+        readModTypes(json['production'], (raw) {
+          if (raw['requiresBuilding'] != null &&
+              raw['requiresBuilding'] != json['id']) {
+            throw const FormatException(
+              'Production must belong to its containing building.',
+            );
+          }
+          return ModUnitType.fromJson({...raw, 'requiresBuilding': json['id']});
+        }, (unit) => unit.id).values,
+      ),
       icon: _icon(json['icon'] ?? 'building', {
         'building',
         'radar',
@@ -88,6 +107,8 @@ class ModUnitType {
   /// Air units may strike visible hostile land/air targets without capturing.
   /// Land units use DALA's ordinary occupation combat instead.
   final int attackRange;
+
+  /// A custom producer, or the province town when omitted by older packages.
   final String? requiresBuilding;
   final String icon;
 
@@ -153,11 +174,12 @@ class ModUnitType {
 Map<String, T> readModTypes<T>(
   Object? raw,
   T Function(Map<String, dynamic>) parse,
-  String Function(T) idOf,
-) {
+  String Function(T) idOf, {
+  int limit = 32,
+}) {
   if (raw == null) return const {};
-  if (raw is! List || raw.length > 32) {
-    throw const FormatException('At most 32 mod types per category.');
+  if (raw is! List || raw.length > limit) {
+    throw FormatException('At most $limit mod types in this list.');
   }
   final result = <String, T>{};
   for (final item in raw) {

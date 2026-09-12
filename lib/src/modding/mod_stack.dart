@@ -68,6 +68,10 @@ class ModStack {
         .convert(utf8.encode(mods.map((m) => m.fingerprint).join(':')))
         .toString();
     final name = mods.map((m) => m.name).join(' + ');
+    final nestedIds = buildings.values
+        .expand((b) => b.production)
+        .map((u) => u.id)
+        .toSet();
     result.addAll({
       'id': 'stack_${key.substring(0, 24)}',
       'name': name.length <= 80 ? name : '${name.substring(0, 77)}...',
@@ -78,7 +82,10 @@ class ModStack {
       if (buildings.isNotEmpty)
         'buildings': buildings.values.map((v) => v.toJson()).toList(),
       if (units.isNotEmpty)
-        'units': units.values.map((v) => v.toJson()).toList(),
+        'units': units.values
+            .where((u) => !nestedIds.contains(u.id))
+            .map((v) => v.toJson())
+            .toList(),
       'components': mods.map((m) => m.reference.toJson()).toList(),
     });
     return ModStack(GameMod.fromJson(result), List.unmodifiable(conflicts));

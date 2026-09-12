@@ -1438,4 +1438,10 @@ const gameTranslations = <String, List<String>>{
     "В примере есть радар, аэродром, разведчик и самолёт. Правила задаются в JSON; исполняемые скрипты не поддерживаются.",
     "The example includes radar, an airfield, a scout and an aircraft. Rules use JSON; executable scripts are not supported.",
   ],
+  "Құрылыс": ["Строительство", "Construction"],
+  "Өндіріс": ["Производство", "Production"],
+  "Сипаттама": ["Сведения", "Details"],
+  "Орын жоқ": ["Нет места", "No space"],
+  "Қазір қолжетімсіз": ["Сейчас недоступно", "Unavailable now"],
+  "Ақша жетпейді": ["Не хватает денег", "Not enough money"],
 };

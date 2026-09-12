@@ -3,7 +3,7 @@ import '../game/models.dart';
 import '../modding/game_mod.dart';
 
 // Declarative buildings/units and aircraft commands must agree on all devices.
-const int lanProtocolVersion = 8;
+const int lanProtocolVersion = 9;
 
 const int lanMaxPlayerNameLength = 20;
 const int lanMaxMessageLength = 512;

@@ -659,5 +659,11 @@
   "Мод табысы": "Mod ienākumi",
   "Мод шығыны": "Mod uzturēšana",
   "Модтар жаңа ғимарат, құрлық әскері және ұшақ түрлерін қосады. Бағасын, шығынын, қозғалысын, қорғанысын және көру радиусын өзгертуге болады.": "Mods pievieno jaunas ēkas, zemes vienības un lidmašīnas. Iestatiet to cenu, apkopi, kustību, aizsardzību un redzes diapazonu.",
-  "Үлгіде радар, аэродром, барлаушы және ұшақ бар. Ережелер JSON арқылы беріледі; орындалатын скрипттер қосылмайды.": "Piemērā ietilpst radars, lidlauks, skauts un lidmašīna. Noteikumos tiek izmantots JSON; izpildāmie skripti netiek atbalstīti."
+  "Үлгіде радар, аэродром, барлаушы және ұшақ бар. Ережелер JSON арқылы беріледі; орындалатын скрипттер қосылмайды.": "Piemērā ietilpst radars, lidlauks, skauts un lidmašīna. Noteikumos tiek izmantots JSON; izpildāmie skripti netiek atbalstīti.",
+  "Құрылыс": "Būvniecība",
+  "Өндіріс": "Ražošana",
+  "Сипаттама": "Informācija",
+  "Орын жоқ": "Nav vietas",
+  "Қазір қолжетімсіз": "Pašlaik nav pieejams",
+  "Ақша жетпейді": "Nepietiek naudas"
 }

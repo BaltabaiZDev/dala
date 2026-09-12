@@ -659,5 +659,11 @@
   "Мод табысы": "Dochód modów",
   "Мод шығыны": "Utrzymanie modów",
   "Модтар жаңа ғимарат, құрлық әскері және ұшақ түрлерін қосады. Бағасын, шығынын, қозғалысын, қорғанысын және көру радиусын өзгертуге болады.": "Mody  dodają nowe budynki, jednostki lądowe i samoloty. Ustaw ich cenę, utrzymanie, ruch, obronę i zasięg widzenia.",
-  "Үлгіде радар, аэродром, барлаушы және ұшақ бар. Ережелер JSON арқылы беріледі; орындалатын скрипттер қосылмайды.": "Przykład obejmuje radar, lotnisko, zwiadowcę i samolot. Reguły używają JSON; skrypty wykonywalne nie są obsługiwane."
+  "Үлгіде радар, аэродром, барлаушы және ұшақ бар. Ережелер JSON арқылы беріледі; орындалатын скрипттер қосылмайды.": "Przykład obejmuje radar, lotnisko, zwiadowcę i samolot. Reguły używają JSON; skrypty wykonywalne nie są obsługiwane.",
+  "Құрылыс": "Budowa",
+  "Өндіріс": "Produkcja",
+  "Сипаттама": "Szczegóły",
+  "Орын жоқ": "Brak miejsca",
+  "Қазір қолжетімсіз": "Teraz niedostępne",
+  "Ақша жетпейді": "Za mało pieniędzy"
 }

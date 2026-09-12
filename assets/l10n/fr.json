@@ -659,5 +659,11 @@
   "Мод табысы": "Le revenu  Mod",
   "Мод шығыны": "Entretien du module",
   "Модтар жаңа ғимарат, құрлық әскері және ұшақ түрлерін қосады. Бағасын, шығынын, қозғалысын, қорғанысын және көру радиусын өзгертуге болады.": "Les mods  ajoutent de nouveaux bâtiments, unités terrestres et avions. Définissez leur prix, leur entretien, leur mouvement, leur défense et leur portée de vision.",
-  "Үлгіде радар, аэродром, барлаушы және ұшақ бар. Ережелер JSON арқылы беріледі; орындалатын скрипттер қосылмайды.": "L'exemple comprend un radar, un aérodrome, un éclaireur et un avion. Les règles utilisent JSON ; les scripts exécutables ne sont pas pris en charge."
+  "Үлгіде радар, аэродром, барлаушы және ұшақ бар. Ережелер JSON арқылы беріледі; орындалатын скрипттер қосылмайды.": "L'exemple comprend un radar, un aérodrome, un éclaireur et un avion. Les règles utilisent JSON ; les scripts exécutables ne sont pas pris en charge.",
+  "Құрылыс": "Construction",
+  "Өндіріс": "Production",
+  "Сипаттама": "Détails",
+  "Орын жоқ": "Pas de place",
+  "Қазір қолжетімсіз": "Indisponible actuellement",
+  "Ақша жетпейді": "Pas assez d’argent"
 }

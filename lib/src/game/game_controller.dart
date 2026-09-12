@@ -1062,9 +1062,16 @@ class GameController extends ChangeNotifier {
   Set<int> get targetTiles {
     if (selectedModTypeId != null) {
       final province = selectedOwnProvince;
+      if (mod.units.containsKey(selectedModTypeId) && selectedTile == null) {
+        return {};
+      }
       return province == null
           ? {}
-          : engine.modBuildTargets(province.id, selectedModTypeId!);
+          : engine.modBuildTargets(
+              province.id,
+              selectedModTypeId!,
+              productionTile: selectedTile,
+            );
     }
     if (selectedAirTile != null) {
       return {
@@ -1146,6 +1153,11 @@ class GameController extends ChangeNotifier {
       ? null
       : state.hexes[selectedAirTile!].airUnit;
 
+  ModBuilding? get selectedModBuilding =>
+      selectedTile == null || selectedOwnProvince == null
+      ? null
+      : mod.buildings[state.hexes[selectedTile!].buildingTypeId];
+
   void selectModType(String id) {
     if (!isLocalHumanTurn ||
         interactionsLocked ||
@@ -1154,7 +1166,17 @@ class GameController extends ChangeNotifier {
         (!mod.buildings.containsKey(id) && !mod.units.containsKey(id))) {
       return;
     }
-    selectedTile = selectedOwnProvince!.capital;
+    final requiredBuilding = mod.units[id]?.requiresBuilding;
+    if (mod.units.containsKey(id)) {
+      if (selectedTile == null ||
+          (requiredBuilding == null
+              ? state.hexes[selectedTile!].object != TileObject.town
+              : selectedModBuilding?.id != requiredBuilding)) {
+        return;
+      }
+    } else {
+      selectedTile = selectedOwnProvince!.capital;
+    }
     selectedAirTile = null;
     selectedWaterCell = null;
     selectedCargoIndex = null;
@@ -1190,15 +1212,20 @@ class GameController extends ChangeNotifier {
     if (selectedModTypeId != null) {
       final province = selectedOwnProvince;
       if (province == null || !isBoardTileVisible(index)) return true;
+      if (mod.units.containsKey(selectedModTypeId) && selectedTile == null) {
+        return true;
+      }
       if (_forwardNetworkCommand('tapModTile', {'index': index})) return true;
       final snapshot = _takeSnapshot();
       final changed = engine.buildModType(
         province.id,
         index,
         selectedModTypeId!,
+        productionTile: selectedTile,
       );
       if (changed) {
         selectedModTypeId = null;
+        selectedTile = index;
         if (tile.airUnit?.owner == state.turn) {
           selectedAirTile = index;
           selectedTile = null;

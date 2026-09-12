@@ -56,7 +56,11 @@ extension ModGameplay on GameEngine {
     }
   }
 
-  Set<int> modBuildTargets(int provinceId, String typeId) {
+  Set<int> modBuildTargets(
+    int provinceId,
+    String typeId, {
+    int? productionTile,
+  }) {
     final province = _provinceById(provinceId);
     if (province == null || province.owner != state.turn) return {};
     final building = mod.buildings[typeId];
@@ -64,10 +68,14 @@ extension ModGameplay on GameEngine {
     if (building == null && unit == null) return {};
     if (province.money < (building?.price ?? unit!.price)) return {};
     Set<int>? production;
-    if (unit?.requiresBuilding != null) {
+    if (unit != null) {
       production = {};
       for (final index in province.tiles) {
-        if (state.hexes[index].buildingTypeId != unit!.requiresBuilding) {
+        if (productionTile != null && index != productionTile) continue;
+        final producer = state.hexes[index];
+        if (unit.requiresBuilding == null
+            ? producer.object != TileObject.town
+            : producer.buildingTypeId != unit.requiresBuilding) {
           continue;
         }
         production.addAll(state.hexes[index].neighbors);
@@ -89,8 +97,17 @@ extension ModGameplay on GameEngine {
     }).toSet();
   }
 
-  bool buildModType(int provinceId, int targetIndex, String typeId) {
-    if (!modBuildTargets(provinceId, typeId).contains(targetIndex)) {
+  bool buildModType(
+    int provinceId,
+    int targetIndex,
+    String typeId, {
+    int? productionTile,
+  }) {
+    if (!modBuildTargets(
+      provinceId,
+      typeId,
+      productionTile: productionTile,
+    ).contains(targetIndex)) {
       return false;
     }
     final province = _provinceById(provinceId)!;

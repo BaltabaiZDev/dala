@@ -38,23 +38,15 @@ GameMod _withPlayerColor(GameMod mod, int offset) {
   if (mod.palette.isEmpty) return mod;
   final normalized = offset % mod.palette.length;
   if (normalized == 0) return mod;
-  return GameMod(
-    id: mod.id,
-    name: mod.name,
-    title: mod.title,
-    version: mod.version,
-    rules: mod.rules,
-    palette: [
-      for (var i = 0; i < mod.palette.length; i++)
-        mod.palette[(i + normalized) % mod.palette.length],
-    ],
-    neutralColor: mod.neutralColor,
-    waterColor: mod.waterColor,
-    sprites: mod.sprites,
-    author: mod.author,
-    description: mod.description,
-    components: mod.components,
-  );
+  // Recolor the full definition so custom types and future mod fields survive.
+  // The match keeps its canonical snapshot; this palette is only for display.
+  final json = mod.toJson();
+  final palette = json['palette'] as List;
+  json['palette'] = [
+    for (var i = 0; i < palette.length; i++)
+      palette[(i + normalized) % palette.length],
+  ];
+  return GameMod.fromJson(json);
 }
 
 class HomeScreen extends StatefulWidget {

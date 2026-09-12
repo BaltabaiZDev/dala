@@ -659,5 +659,11 @@
   "Мод табысы": "Mód bevétel",
   "Мод шығыны": "Mod karbantartás",
   "Модтар жаңа ғимарат, құрлық әскері және ұшақ түрлерін қосады. Бағасын, шығынын, қозғалысын, қорғанысын және көру радиусын өзгертуге болады.": "A  modok új épületeket, szárazföldi egységeket és repülőgépeket adnak hozzá. Állítsa be az árat, a karbantartást, a mozgást, a védelmet és a látási tartományt.",
-  "Үлгіде радар, аэродром, барлаушы және ұшақ бар. Ережелер JSON арқылы беріледі; орындалатын скрипттер қосылмайды.": "A példa radar, repülőteret, felderítőt és repülőgépet tartalmaz. A szabályok JSON-t használnak; a végrehajtható szkriptek nem támogatottak."
+  "Үлгіде радар, аэродром, барлаушы және ұшақ бар. Ережелер JSON арқылы беріледі; орындалатын скрипттер қосылмайды.": "A példa radar, repülőteret, felderítőt és repülőgépet tartalmaz. A szabályok JSON-t használnak; a végrehajtható szkriptek nem támogatottak.",
+  "Құрылыс": "Építés",
+  "Өндіріс": "Termelés",
+  "Сипаттама": "Részletek",
+  "Орын жоқ": "Nincs hely",
+  "Қазір қолжетімсіз": "Jelenleg nem elérhető",
+  "Ақша жетпейді": "Nincs elég pénz"
 }
