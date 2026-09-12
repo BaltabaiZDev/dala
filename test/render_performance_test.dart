@@ -13,6 +13,107 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'large-map spatial culling and crisp object layer preserve visible pixels',
+    () async {
+      final mod = await GameMod.loadDefault();
+      final state = MapGenerator(mod).generate(
+        const GameConfig(
+          mapSize: MapSize.giant,
+          playerCount: 15,
+          humanCount: 15,
+          treePercent: 100,
+          seed: 20260903,
+        ),
+      );
+      final cache = HexTerrainCache(schedule: (_) {});
+      final sprites = await ClassicSprites.load(teamColors: mod.palette);
+      addTearDown(cache.dispose);
+      addTearDown(sprites.dispose);
+      final visible = state.hexes.map((t) => t.index).toSet();
+      HexBoardPainter painter(bool cached) => HexBoardPainter(
+        state: state,
+        mod: mod,
+        sprites: sprites,
+        fogActive: false,
+        terrainCache: cached ? cache : null,
+        terrainSignature: cached ? 1 : null,
+        selected: null,
+        selectedWater: null,
+        selectionOpacity: 0,
+        moveTargets: const {},
+        waterTargets: const {},
+        defensePreviewTiles: const {},
+        defensePreviewWaterCells: const {},
+        defensePreviewOpacity: 0,
+        artilleryRangePreview: false,
+        artilleryVolleys: const [],
+        artilleryFireProgress: 0,
+        visibleTiles: visible,
+        visibleWaterCells: state.waterCells.map((c) => c.index).toSet(),
+      );
+      final source = painter(true);
+      for (final tile in state.hexes.where((t) => t.index % 113 == 0)) {
+        final view = Rect.fromCenter(
+          center: HexBoard.centerOf(tile),
+          width: 280,
+          height: 360,
+        );
+        final indexed = source.tilesWithin(view).map((t) => t.index).toSet();
+        final expected = state.hexes
+            .where((t) => view.contains(HexBoard.centerOf(t)))
+            .map((t) => t.index);
+        expect(indexed, containsAll(expected));
+        expect(indexed.length, lessThan(100));
+      }
+      for (final type in [TileObject.town, TileObject.pine, TileObject.palm]) {
+        final tile = state.hexes.firstWhere(
+          (t) => t.active && t.object == type,
+        );
+        final center = HexBoard.centerOf(tile);
+        final view = Rect.fromCenter(center: center, width: 120, height: 120);
+        cache.setViewport(view, 2);
+        Future<List<int>> pixels(bool cached) async {
+          final recorder = ui.PictureRecorder();
+          // The central 20x24 world pixels isolate the sprite from coast overlap.
+          final canvas = Canvas(recorder)
+            ..scale(2)
+            ..translate(-center.dx + 10, -center.dy + 14);
+          final board = cached ? source : painter(false);
+          board.paint(canvas, HexBoard.canvasSize(state));
+          if (cached) {
+            HexStaticObjectPainter(
+              source: board,
+              viewBounds: view,
+              signature: 1,
+              overview: false,
+            ).paint(canvas, HexBoard.canvasSize(state));
+          }
+          final picture = recorder.endRecording();
+          final image = await picture.toImage(40, 48);
+          final result = (await image.toByteData())!.buffer
+              .asUint8List()
+              .toList();
+          image.dispose();
+          picture.dispose();
+          return result;
+        }
+
+        expect(
+          await pixels(true),
+          await pixels(false),
+          reason: '$type must retain its direct sprite pixels',
+        );
+        cache.trimMemory();
+        expect(
+          await pixels(true),
+          await pixels(false),
+          reason: '$type must remain sharp under memory pressure',
+        );
+      }
+    },
+  );
+
+  test(
     'large-map action mask fallback preserves visible land and sea pixels',
     () async {
       final mod = await GameMod.loadDefault();

@@ -1,0 +1,196 @@
+import 'dart:convert';
+
+import 'package:antiyoy_self/src/game/game_controller.dart';
+import 'package:antiyoy_self/src/game/models.dart';
+import 'package:antiyoy_self/src/modding/game_mod.dart';
+import 'package:antiyoy_self/src/persistence/save_repository.dart';
+import 'package:antiyoy_self/src/ui/diplomacy_sheet.dart';
+import 'package:antiyoy_self/src/ui/hex_board.dart';
+import 'package:antiyoy_self/src/ui/game_screen.dart';
+import 'package:antiyoy_self/src/ui/map_viewport.dart';
+import 'package:antiyoy_self/src/ui/dala_theme.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'diplomacy_social_test.dart' show socialFixture;
+import 'render_test_helpers.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  late GameMod mod;
+  setUpAll(() async {
+    mod = await GameMod.loadDefault();
+    await (FontLoader(
+      'Dala Sans',
+    )..addFont(rootBundle.load('assets/dala/fonts/NotoSans.ttf'))).load();
+  });
+  for (final width in [320.0, 390.0, 1280.0]) {
+    testWidgets('field HUD keeps pause at the edge and map open at $width', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.binding.setSurfaceSize(Size(width, 720));
+      final controller = GameController(
+        mod: mod,
+        state: socialFixture(),
+        saves: SaveRepository(),
+        autosaveEnabled: false,
+      );
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.dispose();
+        await tester.binding.setSurfaceSize(null);
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: DalaTheme.light,
+          home: GameScreen(controller: controller, disposeController: false),
+        ),
+      );
+      await waitForMapSprites(tester);
+      final status = find.byKey(const ValueKey('field-hud-status'));
+      final menu = find.byKey(const ValueKey('field-hud-menu'));
+      for (final money in [null, 17, 1000000000]) {
+        if (money != null) {
+          controller.state.provinces.first.money = money;
+          controller.tapTile(0);
+          await tester.pump(const Duration(milliseconds: 400));
+        }
+        expect(tester.getRect(menu).right, closeTo(width - 8, .1));
+        expect(tester.getSize(menu).height, greaterThanOrEqualTo(44));
+        expect(
+          tester.getRect(status).right + 12,
+          lessThanOrEqualTo(tester.getRect(menu).left),
+        );
+        expect(tester.takeException(), isNull);
+      }
+      await tester.tap(find.bySemanticsLabel('Мәзір'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Жалғастыру'), findsOneWidget);
+    });
+  }
+  testWidgets('incoming gift and demand show the exact land without consent', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.binding.setSurfaceSize(const Size(320, 720));
+    final controller = GameController(
+      mod: mod,
+      state: socialFixture(),
+      saves: SaveRepository(),
+    );
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      controller.dispose();
+      await tester.binding.setSurfaceSize(null);
+    });
+    controller.engine.proposeExchange(
+      from: 1,
+      to: 0,
+      terms: const [
+        DiplomacyTerm(
+          fromSender: true,
+          offer: DiplomacyOffer(
+            type: DiplomacyExchangeType.lands,
+            tiles: [6, 7],
+          ),
+        ),
+        DiplomacyTerm(
+          fromSender: false,
+          offer: DiplomacyOffer(
+            type: DiplomacyExchangeType.lands,
+            tiles: [2, 3],
+          ),
+        ),
+      ],
+    );
+    final before = jsonEncode(controller.state.toJson());
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: DalaTheme.light,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showAntiyoyDiplomacyInbox(context, controller),
+              child: const Text('Inbox'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Inbox'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('↓ Жер'));
+    await tester.pumpAndSettle();
+    for (final (key, tiles) in [
+      ('territory-preview-1-0', {6, 7}),
+      ('territory-preview-0-1', {2, 3}),
+    ]) {
+      final button = find.byKey(ValueKey(key));
+      await tester.ensureVisible(button);
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      await waitForMapSprites(tester);
+      expect(
+        find.byKey(const ValueKey('diplomacy-territory-preview')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('land-selection-confirm')),
+        findsNothing,
+      );
+      final overlay =
+          tester
+                  .widgetList<CustomPaint>(find.byType(CustomPaint))
+                  .firstWhere(
+                    (w) =>
+                        w.painter.runtimeType.toString() ==
+                        '_DiplomacyLandSelectionPainter',
+                  )
+                  .painter
+              as dynamic;
+      expect(overlay.selected, tiles);
+      final viewport = tester.widget<MapViewport>(find.byType(MapViewport));
+      final bounds = Offset.zero & tester.getSize(find.byType(MapViewport));
+      for (final index in tiles) {
+        final center = MatrixUtils.transformPoint(
+          viewport.transformationController.value,
+          HexBoard.centerOf(controller.state.hexes[index]),
+        );
+        expect(
+          bounds.contains(center),
+          isTrue,
+          reason: 'Offered cell must be in view',
+        );
+      }
+      await tester.tapAt(tester.getCenter(find.byType(MapViewport)));
+      await tester.pump();
+      expect(jsonEncode(controller.state.toJson()), before);
+      if (key == 'territory-preview-1-0') {
+        await expectLater(
+          find.byType(MaterialApp),
+          matchesGoldenFile('goldens/territory_preview_phone.png'),
+        );
+      }
+      await tester.tap(find.byKey(const ValueKey('land-selection-cancel')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('diplomacy-letter-page')),
+        findsOneWidget,
+      );
+    }
+    expect(jsonEncode(controller.state.toJson()), before);
+    expect(controller.engine.proposalsFor(0), hasLength(1));
+    await tester.ensureVisible(find.text('Қабылдау'));
+    await tester.tap(find.text('Қабылдау'));
+    await tester.pumpAndSettle();
+    expect(controller.engine.proposalsFor(0), isEmpty);
+    expect(controller.state.hexes[6].owner, 0);
+    expect(controller.state.hexes[2].owner, 1);
+    expect(tester.takeException(), isNull);
+  });
+}

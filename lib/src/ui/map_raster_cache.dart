@@ -49,6 +49,7 @@ class MapRasterCache extends ChangeNotifier {
   bool _rasterEnabled = false;
   bool _active = true;
   bool _memoryConstrained = false;
+  int _detailLevel = 1;
   int builds = 0;
 
   @visibleForTesting
@@ -85,7 +86,7 @@ class MapRasterCache extends ChangeNotifier {
   }
 
   /// Keep gameplay available after Android's low-memory notification, without
-  /// immediately allocating the same detail textures again on the next frame.
+  /// refilling the old budget. A small sharp working set remains available.
   void trimMemory() {
     if (_disposed) return;
     _memoryConstrained = true;
@@ -106,11 +107,15 @@ class MapRasterCache extends ChangeNotifier {
   double get _overviewScale =>
       math.min(1, overviewExtent / math.max(1, _size.longestSide));
 
-  int get _level => _memoryConstrained || _pixelScale <= _overviewScale * 1.35
+  int get _detailBudget => _memoryConstrained
+      ? math.min(maxDetailBytes ~/ 4, 4 * 1024 * 1024)
+      : maxDetailBytes;
+
+  int get _level => _pixelScale <= _overviewScale * 1.35
       ? 0
-      : _pixelScale <= 1.15
+      : _memoryConstrained
       ? 1
-      : 2;
+      : _detailLevel;
 
   /// Camera-only changes do not invalidate terrain or start full-map work.
   /// Repaint only when the texture LOD changes; otherwise retained quads move
@@ -120,6 +125,9 @@ class MapRasterCache extends ChangeNotifier {
     final oldLevel = _level;
     _view = view;
     _pixelScale = pixelScale;
+    // A pinch near a threshold must not alternate two texture sets each frame.
+    if (_detailLevel == 1 && pixelScale > 1.35) _detailLevel = 2;
+    if (_detailLevel == 2 && pixelScale < .95) _detailLevel = 1;
     if (_rasterEnabled &&
         (oldLevel != _level || _overview == null || _failedEpoch == _epoch)) {
       notifyListeners();
@@ -247,7 +255,7 @@ class MapRasterCache extends ChangeNotifier {
     // Never churn when one zoom level's entire visible region exceeds memory.
     final bytesPerTile = (tileSize * level + 2).ceil();
     return keys
-        .take(maxDetailBytes ~/ (bytesPerTile * bytesPerTile * 4))
+        .take(_detailBudget ~/ (bytesPerTile * bytesPerTile * 4))
         .toList();
   }
 
@@ -330,13 +338,13 @@ class MapRasterCache extends ChangeNotifier {
         if (key == null) {
           _overview = texture;
         } else if (_wantedTiles().contains(key)) {
-          while (_detailBytes + texture.bytes > maxDetailBytes &&
+          while (_detailBytes + texture.bytes > _detailBudget &&
               _tiles.isNotEmpty) {
             final oldest = _tiles.remove(_tiles.keys.first)!;
             _detailBytes -= oldest.bytes;
             oldest.image.dispose();
           }
-          if (texture.bytes <= maxDetailBytes) {
+          if (texture.bytes <= _detailBudget) {
             _tiles[key] = texture;
             _detailBytes += texture.bytes;
           } else {

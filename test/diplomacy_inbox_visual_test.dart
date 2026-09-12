@@ -60,6 +60,11 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: DalaTheme.light,
+        // Asset loading time must not choose the flag phase of this static image.
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
         home: GameScreen(controller: controller),
       ),
     );

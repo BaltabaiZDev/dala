@@ -2467,7 +2467,7 @@ void main() {
       MaterialApp(home: GameScreen(controller: controller)),
     );
     await tester.pump(const Duration(milliseconds: 350));
-    await tester.tapAt(const Offset(195, 29));
+    await tester.tap(find.bySemanticsLabel('Доход есебі'));
     await tester.pump(const Duration(milliseconds: 250));
 
     for (final label in const [

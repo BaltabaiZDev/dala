@@ -1076,7 +1076,6 @@ class _ClassicHud extends StatelessWidget {
     required this.onReport,
     required this.onMenu,
   });
-
   final GameController controller;
   final VoidCallback onRanking;
   final VoidCallback onReport;
@@ -1084,117 +1083,137 @@ class _ClassicHud extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The original game never reveals an opponent province's economy.
     final selected = controller.selectedOwnProvince;
-    final visible = selected != null;
-    final money = selected?.money ?? 0;
     final balance = selected == null ? 0 : controller.engine.balance(selected);
-    return Container(
-      height: 58,
-      margin: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: DalaTheme.panel(),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: _HudReveal(
-                visible: visible,
-                child: Semantics(
-                  button: true,
-                  label: context.trNullable('Доход рейтингі'),
-                  excludeSemantics: true,
-                  child: AntiyoyPressable(
-                    onTap: onRanking,
-                    behavior: HitTestBehavior.opaque,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        DalaAsset(
-                          'assets/classic/coin.png',
-                          width: 34,
-                          height: 34,
+    final player = controller.visibilityPlayer;
+    final color =
+        controller.mod.palette[player % controller.mod.palette.length];
+    Widget action(String label, VoidCallback onTap, Widget child) => Semantics(
+      button: true,
+      label: context.tr(label),
+      excludeSemantics: true,
+      child: AntiyoyPressable(
+        onTap: onTap,
+        child: SizedBox(height: 44, child: child),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: _FieldPlaque(
+                key: const ValueKey('field-hud-status'),
+                child: selected == null
+                    ? SizedBox(
+                        height: 44,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.flag, color: color, size: 21),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: GameText(
+                                controller.playerName(player),
+                                translate: false,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: DalaTheme.paper,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 3),
-                        _HudText('$money'),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Align(
-              child: _HudReveal(
-                visible: visible,
-                child: Semantics(
-                  button: true,
-                  label: context.trNullable('Доход есебі'),
-                  child: AntiyoyPressable(
-                    onTap: onReport,
-                    behavior: HitTestBehavior.opaque,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+                      )
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: action(
+                              'Доход рейтингі',
+                              onRanking,
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    DalaAsset(
+                                      'assets/classic/coin.png',
+                                      width: 24,
+                                      height: 24,
+                                    ),
+                                    const SizedBox(width: 5),
+                                    _HudText('${selected.money}'),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          Container(
+                            width: 1,
+                            height: 20,
+                            margin: const EdgeInsets.symmetric(horizontal: 12),
+                            color: DalaTheme.gold,
+                          ),
+                          Flexible(
+                            child: action(
+                              'Доход есебі',
+                              onReport,
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: _HudText(
+                                  '${balance >= 0 ? '+' : ''}$balance',
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      child: _HudText('${balance >= 0 ? '+' : ''}$balance'),
-                    ),
-                  ),
-                ),
               ),
             ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Semantics(
-                button: true,
-                label: context.trNullable('Мәзір'),
-                child: AntiyoyPressable(
-                  onTap: onMenu,
-                  behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: DalaAsset(
-                      'assets/classic/menu_icon.png',
-                      width: 29,
-                      height: 29,
-                    ),
-                  ),
-                ),
+          ),
+          const SizedBox(width: 12),
+          _FieldPlaque(
+            key: const ValueKey('field-hud-menu'),
+            child: action(
+              'Мәзір',
+              onMenu,
+              const SizedBox(
+                width: 28,
+                child: Icon(Icons.pause, size: 24, color: DalaTheme.gold),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _HudReveal extends StatelessWidget {
-  const _HudReveal({required this.visible, required this.child});
-
-  final bool visible;
+/// Small cut-corner plaques leave the map visible between the HUD controls.
+class _FieldPlaque extends StatelessWidget {
+  const _FieldPlaque({required this.child, super.key});
   final Widget child;
-
   @override
-  Widget build(BuildContext context) => AnimatedSwitcher(
-    duration: const Duration(milliseconds: 220),
-    switchInCurve: Curves.easeOutCubic,
-    switchOutCurve: Curves.easeInCubic,
-    transitionBuilder: (child, animation) => FadeTransition(
-      opacity: animation,
-      child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, -.28),
-          end: Offset.zero,
-        ).animate(animation),
-        child: child,
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: const ShapeDecoration(
+      color: DalaTheme.ink,
+      shape: BeveledRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(5)),
+        side: BorderSide(color: DalaTheme.gold, width: 1),
       ),
+      shadows: [BoxShadow(color: Color(0x30243e38), offset: Offset(0, 2))],
     ),
-    child: visible
-        ? KeyedSubtree(key: const ValueKey('hud-visible'), child: child)
-        : const SizedBox.shrink(key: ValueKey('hud-hidden')),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: child,
+    ),
   );
 }
 
@@ -1206,8 +1225,8 @@ class _HudText extends StatelessWidget {
   Widget build(BuildContext context) => GameText(
     text,
     style: const TextStyle(
-      color: DalaTheme.ink,
-      fontSize: 24,
+      color: DalaTheme.paper,
+      fontSize: 20,
       height: 1,
       fontWeight: FontWeight.w600,
     ),
@@ -1323,14 +1342,7 @@ class _FastConstructionPanel extends StatelessWidget {
               : 54,
           decoration: const BoxDecoration(
             color: DalaTheme.paper,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-            boxShadow: [
-              BoxShadow(
-                color: Color(0x24243e38),
-                blurRadius: 16,
-                offset: Offset(0, -3),
-              ),
-            ],
+            border: Border(top: BorderSide(color: DalaTheme.gold, width: 2)),
           ),
           clipBehavior: Clip.antiAlias,
           child: IgnorePointer(

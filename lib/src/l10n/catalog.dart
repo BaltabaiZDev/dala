@@ -1296,4 +1296,9 @@ const gameTranslations = <String, List<String>>{
     "Вы платите ему субсидию \${0} за ход. Осталось {1} ходов. Это договорная сумма; выплата зависит от вашего дохода и казны.",
     "You pay them a \${0} subsidy per turn. {1} turns remain. This is the agreed amount; actual payments depend on your income and treasury.",
   ],
+  "Картадан қарау": ["Посмотреть на карте", "View on map"],
+  "Белгіленген жерлер ұсынысқа кіреді. Қарау келісімді қабылдамайды.": [
+    "Отмеченные земли входят в предложение. Просмотр не означает согласия.",
+    "Highlighted land is part of the offer. Viewing does not accept it.",
+  ],
 };

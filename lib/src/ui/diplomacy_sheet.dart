@@ -752,6 +752,16 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
                     translate: false,
                     style: const TextStyle(fontSize: 14),
                   ),
+                if (proposal != null)
+                  for (final term in proposal.effectiveTerms.where(
+                    (t) => t.offer.type == DiplomacyExchangeType.lands,
+                  ))
+                    _TerritoryPreviewButton(
+                      controller: controller,
+                      giver: term.fromSender ? proposal.from : proposal.to,
+                      receiver: term.fromSender ? proposal.to : proposal.from,
+                      offer: term.offer,
+                    ),
                 if (proposal != null && proposal.rationale.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
@@ -1527,6 +1537,22 @@ class _ExchangePageState extends State<_ExchangePage> {
                             '+ Шарт қосу',
                             style: TextStyle(fontSize: 14, color: Colors.black),
                           ),
+                        ),
+                      for (final term in _terms.where(
+                        (t) =>
+                            t.offer.type == DiplomacyExchangeType.lands &&
+                            (t.offer.tiles.isNotEmpty ||
+                                t.offer.navalRefs.isNotEmpty),
+                      ))
+                        _TerritoryPreviewButton(
+                          controller: controller,
+                          giver: term.fromSender
+                              ? widget.current
+                              : widget.other,
+                          receiver: term.fromSender
+                              ? widget.other
+                              : widget.current,
+                          offer: term.offer,
                         ),
                       const SizedBox(height: 8),
                     ],
@@ -2723,6 +2749,49 @@ class _LandPicker extends StatelessWidget {
   }
 }
 
+class _TerritoryPreviewButton extends StatelessWidget {
+  const _TerritoryPreviewButton({
+    required this.controller,
+    required this.giver,
+    required this.receiver,
+    required this.offer,
+  });
+  final GameController controller;
+  final int giver;
+  final int receiver;
+  final DiplomacyOffer offer;
+  @override
+  Widget build(BuildContext context) => OutlinedButton.icon(
+    key: ValueKey('territory-preview-$giver-$receiver'),
+    icon: const Icon(Icons.map_outlined),
+    label: Column(
+      children: [
+        const GameText('Картадан қарау'),
+        GameText(
+          '${controller.playerName(giver)} → ${controller.playerName(receiver)}',
+          translate: false,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 12),
+        ),
+      ],
+    ),
+    onPressed: () => Navigator.of(context, rootNavigator: true).push<void>(
+      MaterialPageRoute(
+        builder: (_) => _DiplomacyLandSelectionPage(
+          controller: controller,
+          giver: giver,
+          initialTiles: offer.tiles,
+          initialNaval: offer.navalRefs,
+          readOnly: true,
+          previewTitle:
+              '${controller.playerName(giver)} → ${controller.playerName(receiver)}',
+        ),
+      ),
+    ),
+  );
+}
+
 class _TerritorySelectionResult {
   const _TerritorySelectionResult({
     required this.tiles,
@@ -2742,6 +2811,8 @@ class _DiplomacyLandSelectionPage extends StatefulWidget {
     required this.giver,
     required this.initialTiles,
     required this.initialNaval,
+    this.readOnly = false,
+    this.previewTitle,
     this.conferenceId,
     this.conferenceRecipient,
     this.lockedConferenceTiles = const <int>{},
@@ -2752,6 +2823,8 @@ class _DiplomacyLandSelectionPage extends StatefulWidget {
   final int giver;
   final List<int> initialTiles;
   final List<NavalAssetRef> initialNaval;
+  final bool readOnly;
+  final String? previewTitle;
   final int? conferenceId;
   final int? conferenceRecipient;
   final Set<int> lockedConferenceTiles;
@@ -2769,6 +2842,22 @@ class _DiplomacyLandSelectionPageState
   final Set<int> _selected = <int>{};
   final Map<String, NavalAssetRef> _selectedNaval = <String, NavalAssetRef>{};
   ClassicSprites? _sprites;
+  final HexTerrainCache _terrainCache = HexTerrainCache();
+  final MapPieceCullWindow _objectWindow = MapPieceCullWindow();
+  Size _mapViewport = Size.zero;
+  double _pixelRatio = 1;
+  Rect get _viewBounds => Rect.fromPoints(
+    _transformation.toScene(Offset.zero),
+    _transformation.toScene(_mapViewport.bottomRight(Offset.zero)),
+  );
+  void _syncCache() {
+    if (_mapViewport.isEmpty) return;
+    _terrainCache.setViewport(
+      _viewBounds,
+      _transformation.value.entry(0, 0) * _pixelRatio,
+    );
+  }
+
   bool _cameraFitted = false;
   late final AnimationController _priceAnimation;
   Offset? _priceCenter;
@@ -2780,6 +2869,7 @@ class _DiplomacyLandSelectionPageState
   @override
   void initState() {
     super.initState();
+    _transformation.addListener(_syncCache);
     _priceAnimation =
         AnimationController(
           vsync: this,
@@ -2788,7 +2878,19 @@ class _DiplomacyLandSelectionPageState
           if (mounted) setState(() {});
         });
     final visible = controller.visibleTileIndices;
-    if (_conferenceMode) {
+    if (widget.readOnly) {
+      _selected.addAll(
+        widget.initialTiles.where(
+          (i) =>
+              i >= 0 &&
+              i < controller.viewState.hexes.length &&
+              controller.viewState.hexes[i].inWorld,
+        ),
+      );
+      for (final reference in widget.initialNaval) {
+        _selectedNaval[_navalKey(reference)] = reference;
+      }
+    } else if (_conferenceMode) {
       _selected.addAll(
         widget.initialTiles.where(
           (index) =>
@@ -2825,7 +2927,10 @@ class _DiplomacyLandSelectionPageState
         }
       }
     }
-    ClassicSprites.load().then((sprites) {
+    ClassicSprites.load(
+      teamColors: controller.mod.palette,
+      overrides: controller.mod.sprites,
+    ).then((sprites) {
       if (!mounted) {
         sprites.dispose();
         return;
@@ -2836,6 +2941,8 @@ class _DiplomacyLandSelectionPageState
 
   @override
   void dispose() {
+    _transformation.removeListener(_syncCache);
+    _terrainCache.dispose();
     _sprites?.dispose();
     _priceAnimation.dispose();
     _transformation.dispose();
@@ -2848,9 +2955,36 @@ class _DiplomacyLandSelectionPageState
     final boardSize = HexBoard.canvasSize(state);
     final visibleTiles = controller.visibleTileIndices;
     final visibleWater = controller.visibleWaterCellIndices;
+    _pixelRatio = MediaQuery.devicePixelRatioOf(context);
+    final mapPainter = HexBoardPainter(
+      terrainCache: _terrainCache,
+      terrainSignature: Object.hash(
+        identityHashCode(state),
+        identityHashCode(_sprites),
+      ),
+      state: state,
+      mod: controller.mod,
+      fogActive: controller.fogActive,
+      sprites: _sprites,
+      selected: null,
+      selectedWater: null,
+      selectionOpacity: 0,
+      moveTargets: const <int>{},
+      waterTargets: const <int>{},
+      defensePreviewTiles: const <int>{},
+      defensePreviewWaterCells: const <int>{},
+      defensePreviewOpacity: 0,
+      artilleryRangePreview: false,
+      artilleryVolleys: const [],
+      artilleryFireProgress: 0,
+      visibleTiles: visibleTiles,
+      visibleWaterCells: visibleWater,
+    );
     return Scaffold(
       key: ValueKey(
-        _conferenceMode
+        widget.readOnly
+            ? 'diplomacy-territory-preview'
+            : _conferenceMode
             ? 'peace-allocation-picker-${widget.conferenceRecipient}'
             : 'diplomacy-land-selection-page',
       ),
@@ -2871,7 +3005,9 @@ class _DiplomacyLandSelectionPageState
                             ? 'peace-allocation-cancel'
                             : 'land-selection-cancel',
                       ),
-                      tooltip: context.trNullable('Бас тарту'),
+                      tooltip: context.trNullable(
+                        widget.readOnly ? 'Жабу' : 'Бас тарту',
+                      ),
                       onPressed: () => Navigator.pop(context),
                       icon: const Icon(
                         Icons.close,
@@ -2882,60 +3018,76 @@ class _DiplomacyLandSelectionPageState
                   ),
                   Expanded(
                     child: GameText(
-                      _conferenceMode
-                          ? '${controller.playerName(widget.conferenceRecipient!)} ойыншысының жер үлесі'
-                          : 'Жер және теңіз активтері',
+                      widget.previewTitle ??
+                          (_conferenceMode
+                              ? '${controller.playerName(widget.conferenceRecipient!)} ойыншысының жер үлесі'
+                              : 'Жер және теңіз активтері'),
+                      translate: widget.previewTitle == null,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: Colors.white, fontSize: 24),
                     ),
                   ),
-                  SizedBox(
-                    width: 76,
-                    child: IconButton(
-                      key: ValueKey(
-                        _conferenceMode
-                            ? 'peace-allocation-confirm'
-                            : 'land-selection-confirm',
-                      ),
-                      tooltip: context.trNullable('Таңдауды растау'),
-                      onPressed:
-                          !_conferenceMode &&
-                              _selected.isEmpty &&
-                              _selectedNaval.isEmpty
-                          ? null
-                          : () => Navigator.pop(
-                              context,
-                              _TerritorySelectionResult(
-                                tiles: _selected.toList()..sort(),
-                                navalRefs: _selectedNaval.values.toList()
-                                  ..sort((a, b) {
-                                    final byKind = a.kind.index.compareTo(
-                                      b.kind.index,
-                                    );
-                                    return byKind != 0
-                                        ? byKind
-                                        : a.id.compareTo(b.id);
-                                  }),
-                              ),
-                            ),
-                      icon: Icon(
-                        Icons.check,
-                        color:
+                  if (!widget.readOnly)
+                    SizedBox(
+                      width: 76,
+                      child: IconButton(
+                        key: ValueKey(
+                          _conferenceMode
+                              ? 'peace-allocation-confirm'
+                              : 'land-selection-confirm',
+                        ),
+                        tooltip: context.trNullable('Таңдауды растау'),
+                        onPressed:
                             !_conferenceMode &&
                                 _selected.isEmpty &&
                                 _selectedNaval.isEmpty
-                            ? Colors.white24
-                            : const Color(0xff5fd66c),
-                        size: 46,
+                            ? null
+                            : () => Navigator.pop(
+                                context,
+                                _TerritorySelectionResult(
+                                  tiles: _selected.toList()..sort(),
+                                  navalRefs: _selectedNaval.values.toList()
+                                    ..sort((a, b) {
+                                      final byKind = a.kind.index.compareTo(
+                                        b.kind.index,
+                                      );
+                                      return byKind != 0
+                                          ? byKind
+                                          : a.id.compareTo(b.id);
+                                    }),
+                                ),
+                              ),
+                        icon: Icon(
+                          Icons.check,
+                          color:
+                              !_conferenceMode &&
+                                  _selected.isEmpty &&
+                                  _selectedNaval.isEmpty
+                              ? Colors.white24
+                              : const Color(0xff5fd66c),
+                          size: 46,
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),
+            if (widget.readOnly)
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: GameText(
+                  'Белгіленген жерлер ұсынысқа кіреді. Қарау келісімді қабылдамайды.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
+                  _mapViewport = constraints.biggest;
+                  _syncCache();
                   if (!_cameraFitted) {
                     _cameraFitted = true;
                     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2957,35 +3109,41 @@ class _DiplomacyLandSelectionPageState
                       height: boardSize.height,
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTapUp: (details) => _toggleTile(
-                          _nearestTile(details.localPosition, state),
-                          visibleTiles,
-                          visibleWater,
-                        ),
+                        onTapUp: widget.readOnly
+                            ? null
+                            : (details) => _toggleTile(
+                                _nearestTile(details.localPosition, state),
+                                visibleTiles,
+                                visibleWater,
+                              ),
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
                             CustomPaint(
-                              painter: HexBoardPainter(
-                                state: state,
-                                mod: controller.mod,
-                                fogActive: controller.fogActive,
-                                sprites: _sprites,
-                                selected: null,
-                                selectedWater: null,
-                                selectionOpacity: 0,
-                                moveTargets: const <int>{},
-                                waterTargets: const <int>{},
-                                defensePreviewTiles: const <int>{},
-                                defensePreviewWaterCells: const <int>{},
-                                defensePreviewOpacity: 0,
-                                artilleryRangePreview: false,
-                                artilleryVolleys: const [],
-                                artilleryFireProgress: 0,
-                                visibleTiles: visibleTiles,
-                                visibleWaterCells: visibleWater,
-                              ),
+                              willChange: state.hexes.length >= 1200,
+                              painter: mapPainter,
                             ),
+                            if (state.hexes.length >= 1200)
+                              AnimatedBuilder(
+                                animation: _transformation,
+                                builder: (context, _) => CustomPaint(
+                                  willChange: true,
+                                  painter: HexStaticObjectPainter(
+                                    source: mapPainter,
+                                    viewBounds: _objectWindow.resolve(
+                                      _viewBounds.inflate(80),
+                                    ),
+                                    signature: identityHashCode(mapPainter),
+                                    overview:
+                                        _transformation.value.entry(0, 0) <=
+                                        MapCameraBounds.fitScale(
+                                              _mapViewport,
+                                              boardSize,
+                                            ) *
+                                            1.35,
+                                  ),
+                                ),
+                              ),
                             IgnorePointer(
                               child: CustomPaint(
                                 painter: HexUnitPainter(
@@ -3044,21 +3202,26 @@ class _DiplomacyLandSelectionPageState
     final selected = _selectedNaval.keys.toSet();
     return <int>{
       for (final cell in controller.viewState.waterCells)
-        if ((cell.boat != null &&
-                selected.contains(
-                  _navalKey(
-                    NavalAssetRef(kind: NavalAssetKind.boat, id: cell.boat!.id),
-                  ),
-                )) ||
-            (cell.seaFort != null &&
-                selected.contains(
-                  _navalKey(
-                    NavalAssetRef(
-                      kind: NavalAssetKind.seaFort,
-                      id: cell.seaFort!.id,
-                    ),
-                  ),
-                )))
+        if ((!widget.readOnly ||
+                controller.visibleWaterCellIndices.contains(cell.index)) &&
+            ((cell.boat != null &&
+                    selected.contains(
+                      _navalKey(
+                        NavalAssetRef(
+                          kind: NavalAssetKind.boat,
+                          id: cell.boat!.id,
+                        ),
+                      ),
+                    )) ||
+                (cell.seaFort != null &&
+                    selected.contains(
+                      _navalKey(
+                        NavalAssetRef(
+                          kind: NavalAssetKind.seaFort,
+                          id: cell.seaFort!.id,
+                        ),
+                      ),
+                    ))))
           cell.index,
     };
   }
@@ -3208,8 +3371,15 @@ class _DiplomacyLandSelectionPageState
   }
 
   void _fitCamera(Size viewport, Size boardSize, GameState state) {
+    final focus = {
+      ..._selected,
+      for (final i in _selectedWaterCells) ...state.waterCells[i].tiles,
+    };
     final centers = state.hexes
-        .where((tile) => tile.inWorld)
+        .where(
+          (tile) =>
+              tile.inWorld && (focus.isEmpty || focus.contains(tile.index)),
+        )
         .map(HexBoard.centerOf)
         .toList();
     if (centers.isEmpty || viewport.isEmpty) return;

@@ -145,7 +145,7 @@ void main() {
   );
 
   test(
-    'startup fallback is culled and memory pressure cannot refill detail',
+    'startup fallback is culled and memory pressure retains bounded sharp detail',
     () async {
       final probe = _RasterProbe(maxDetailBytes: 32 * 1024 * 1024);
       const view = ui.Rect.fromLTWH(200, 200, 100, 100);
@@ -156,27 +156,50 @@ void main() {
       await probe.drain();
       expect(probe.cache.textureCount, greaterThan(1));
       final beforeBytes = probe.cache.textureBytes;
-      final beforeCalls = probe.calls;
+      final beforeOverviewCalls = probe.overviewCalls;
       probe.cache.trimMemory();
       expect(probe.cache.textureBytes, lessThan(beforeBytes));
       expect(probe.cache.textureCount, 1);
+      final overviewBytes = probe.cache.textureBytes;
       await probe.drain();
-      expect(probe.cache.textureCount, 1);
+      expect(probe.cache.hasDetailAt(view.center), isTrue);
+      expect(probe.cache.textureBytes, lessThan(beforeBytes));
       for (var i = 0; i < 10; i++) {
         probe.cache.setViewport(view.shift(ui.Offset(i * 20, 0)), 2);
         probe.draw(1, regions: true);
       }
       await probe.drain();
-      expect(probe.cache.textureCount, 1);
-      expect(probe.cache.hasDetailAt(view.center), isFalse);
+      expect(probe.cache.textureCount, greaterThan(1));
       expect(
-        probe.calls,
-        beforeCalls,
+        probe.cache.textureBytes,
+        lessThanOrEqualTo(overviewBytes + 4 * 1024 * 1024),
+      );
+      expect(probe.cache.hasDetailAt(view.center), isTrue);
+      expect(
+        probe.overviewCalls,
+        beforeOverviewCalls,
         reason: 'Memory pressure must not reallocate an existing overview',
       );
       probe.cache.dispose();
     },
   );
+  test('pinch near a detail threshold reuses the current resolution', () async {
+    final probe = _RasterProbe(
+      maxDetailBytes: 32 * 1024 * 1024,
+      overviewExtent: 256,
+    );
+    const view = ui.Rect.fromLTWH(200, 200, 100, 100);
+    probe.cache.setViewport(view, 2);
+    probe.draw(1, regions: true);
+    await probe.drain();
+    final calls = probe.calls;
+    for (final scale in [1.1, 1.25, 1.12, 1.3, 1.0]) {
+      probe.cache.setViewport(view, scale);
+      await probe.drain();
+    }
+    expect(probe.calls, calls);
+    probe.cache.dispose();
+  });
 }
 
 class _RasterProbe {
@@ -184,13 +207,16 @@ class _RasterProbe {
     ui.Color background = const ui.Color(0xff12384f),
     bool fail = false,
     int maxDetailBytes = 5 * 1024 * 1024,
+    double overviewExtent = 1536,
   }) {
     cache = MapRasterCache(
       maxDetailBytes: maxDetailBytes,
+      overviewExtent: overviewExtent,
       backgroundColor: background,
       schedule: jobs.add,
       rasterizer: (picture, width, height) {
         calls++;
+        if (width == 800 && height == 800) overviewCalls++;
         final future = () async {
           if (hold != null) await hold;
           if (fail) throw StateError('test allocation failure');
@@ -206,6 +232,7 @@ class _RasterProbe {
   Future<void>? hold;
   Future<void>? current;
   int calls = 0;
+  int overviewCalls = 0;
   int detailRecords = 0;
   int fullRecords = 0;
   final recordedRegions = <ui.Rect>[];
