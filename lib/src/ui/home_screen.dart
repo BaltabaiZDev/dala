@@ -1,3 +1,4 @@
+import '../l10n/game_locale.dart';
 import 'dala_theme.dart';
 import 'dala_art.dart';
 import 'dart:convert';
@@ -52,6 +53,7 @@ GameMod _withPlayerColor(GameMod mod, int offset) {
     sprites: mod.sprites,
     author: mod.author,
     description: mod.description,
+    components: mod.components,
   );
 }
 
@@ -341,109 +343,137 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) => SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 88, 16, 24),
+          padding: const EdgeInsets.fromLTRB(24, 84, 24, 20),
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              minHeight: math.max(0, constraints.maxHeight - 112),
+              minHeight: math.max(0, constraints.maxHeight - 104),
             ),
             child: Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 322),
+                constraints: const BoxConstraints(maxWidth: 360),
                 child: FutureBuilder<bool>(
                   future: _hasSave,
-                  builder: (context, snapshot) => _ClassicPanel(
-                    padding: EdgeInsets.zero,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(20, 20, 20, 16),
-                          child: Column(
-                            children: [
-                              DalaAsset('castle', width: 64, height: 64),
-                              Text(
-                                'DALA',
-                                style: TextStyle(
-                                  fontSize: 34,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 8,
-                                  color: DalaTheme.ink,
-                                ),
-                              ),
-                              Text(
-                                'Д А Л А   А Т Л А С Ы',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: DalaTheme.deepWater,
-                                ),
-                              ),
-                            ],
+                  builder: (context, snapshot) => Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const DalaAsset('castle', width: 72, height: 72),
+                      const GameText(
+                        'DALA',
+                        style: TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 9,
+                          color: DalaTheme.ink,
+                        ),
+                      ),
+                      const GameText(
+                        'ДАЛА АТЛАСЫ',
+                        style: TextStyle(
+                          fontSize: 10,
+                          letterSpacing: 3,
+                          fontWeight: FontWeight.w600,
+                          color: DalaTheme.deepWater,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      _HomeAction(
+                        label: 'Шайқас',
+                        icon: Icons.flag_outlined,
+                        primary: true,
+                        onTap: () => _openConfigScreen(
+                          _NewGameScreen(
+                            repository: _settings,
+                            palette: _library.activeMod.palette,
                           ),
                         ),
-                        if (snapshot.data == true)
-                          _MenuBand(
-                            label: 'Жалғастыру',
-                            color: _green,
-                            onTap: _continueGame,
-                          ),
-                        _MenuBand(
-                          label: 'Шайқас',
-                          color: _olive,
-                          onTap: () => _openConfigScreen(
-                            _NewGameScreen(
-                              repository: _settings,
-                              palette: _library.activeMod.palette,
-                            ),
-                          ),
-                        ),
-                        _MenuBand(
-                          label: 'LAN ойыны',
-                          color: _orange,
-                          onTap: _openLan,
-                        ),
-                        _MenuBand(
-                          label: 'Модтар мен карталар',
-                          color: _blue,
-                          onTap: _openContent,
-                        ),
-                        if (_library.activeHash != null)
-                          Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Text(
-                              'Мод: ${_library.activeMod.name}',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                        _MenuBand(
-                          label: 'Редактор',
-                          color: _green,
-                          onTap: _openEditor,
-                        ),
-                        _MenuBand(
-                          label: 'Ойыншы деңгейлері',
-                          color: _blue,
-                          onTap: _openPlayerLevels,
-                        ),
-                        _MenuBand(
-                          label: 'Кампания',
-                          color: _green,
-                          onTap: _openCampaignLevels,
-                        ),
-                        _MenuBand(
-                          label: 'Жүктеу',
-                          color: _olive,
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => _SaveSlotsScreen(
-                                saves: widget.saves,
-                                onLoad: _continueGame,
-                              ),
-                            ),
-                          ),
+                      ),
+                      if (snapshot.data == true) ...[
+                        const SizedBox(height: 8),
+                        _HomeAction(
+                          label: 'Жалғастыру',
+                          icon: Icons.play_arrow,
+                          onTap: _continueGame,
                         ),
                       ],
-                    ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _HomeAction(
+                              label: 'LAN ойыны',
+                              icon: Icons.wifi,
+                              onTap: _openLan,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _HomeAction(
+                              label: 'Кампания',
+                              icon: Icons.explore_outlined,
+                              onTap: _openCampaignLevels,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _HomeAction(
+                              label: 'Модтар мен карталар',
+                              icon: Icons.inventory_2_outlined,
+                              onTap: _openContent,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _HomeAction(
+                              label: 'Редактор',
+                              icon: Icons.edit_outlined,
+                              onTap: _openEditor,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _HomeAction(
+                              label: 'Ойыншы деңгейлері',
+                              icon: Icons.map_outlined,
+                              onTap: _openPlayerLevels,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _HomeAction(
+                              label: 'Жүктеу',
+                              icon: Icons.bookmark_border,
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => _SaveSlotsScreen(
+                                    saves: widget.saves,
+                                    onLoad: _continueGame,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_library.activeHashes.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: GameText(
+                            'Қосулы модтар: ${_library.activeHashes.length}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: DalaTheme.deepWater,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -453,6 +483,62 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+class _HomeAction extends StatelessWidget {
+  const _HomeAction({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.primary = false,
+  });
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool primary;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: context.trNullable(label),
+    child: AntiyoyPressable(
+      onTap: onTap,
+      child: Container(
+        constraints: BoxConstraints(minHeight: primary ? 54 : 50),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: primary ? DalaTheme.ink : DalaTheme.paper,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: primary ? DalaTheme.ink : DalaTheme.line),
+          boxShadow: const [
+            BoxShadow(color: Color(0x22243e38), offset: Offset(0, 3)),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: primary ? 22 : 18,
+              color: primary ? DalaTheme.gold : DalaTheme.deepWater,
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: GameText(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: primary ? 18 : 12,
+                  height: 1.2,
+                  fontWeight: FontWeight.w700,
+                  color: primary ? DalaTheme.paper : DalaTheme.ink,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _NewGameScreen extends StatefulWidget {
@@ -709,14 +795,14 @@ class _AdvancedGameSettingsScreenState
                 Row(
                   children: [
                     const Expanded(
-                      child: Text(
+                      child: GameText(
                         'Ойыншы түсі:',
                         style: TextStyle(fontSize: 27),
                       ),
                     ),
                     Semantics(
                       button: true,
-                      label: 'Ойыншы түсін таңдау',
+                      label: context.trNullable('Ойыншы түсін таңдау'),
                       child: AntiyoyPressable(
                         key: const ValueKey('player-color-selector'),
                         onTap: _openPlayerColorPicker,
@@ -821,12 +907,14 @@ class _LevelsScreen extends StatelessWidget {
                 final scenario = campaignScenarios[index];
                 return Semantics(
                   button: available,
-                  label: available
-                      ? '$level-деңгейді бастау: ${scenario.title}'
-                      : '$level-деңгей жабық: ${scenario.title}',
-                  hint: available
-                      ? 'Ұзақ бассаңыз редакторға көшіріледі'
-                      : null,
+                  label: context.trNullable(
+                    available
+                        ? '$level-деңгейді бастау: ${scenario.title}'
+                        : '$level-деңгей жабық: ${scenario.title}',
+                  ),
+                  hint: context.trNullable(
+                    available ? 'Ұзақ бассаңыз редакторға көшіріледі' : null,
+                  ),
                   child: AntiyoyPressable(
                     onTap: available
                         ? () => Navigator.pop(context, _levelConfig(level))
@@ -845,7 +933,7 @@ class _LevelsScreen extends StatelessWidget {
                             color: const Color(0xffd7efd6),
                             border: Border.all(color: border, width: 2),
                           ),
-                          child: Text(
+                          child: GameText(
                             '$level',
                             style: const TextStyle(fontSize: 19),
                           ),
@@ -936,7 +1024,7 @@ class _CampaignScreenState extends State<_CampaignScreen> {
                 children: [
                   const Align(
                     alignment: Alignment.centerLeft,
-                    child: Text('СҮЗГІЛЕР', style: TextStyle(fontSize: 28)),
+                    child: GameText('СҮЗГІЛЕР', style: TextStyle(fontSize: 28)),
                   ),
                   const SizedBox(height: 8),
                   _ToggleRow(
@@ -983,7 +1071,7 @@ class _CampaignScreenState extends State<_CampaignScreen> {
                         return const SizedBox(
                           height: 60,
                           child: Center(
-                            child: Text(
+                            child: GameText(
                               'Ойыншы деңгейлері',
                               style: TextStyle(fontSize: 27),
                             ),
@@ -1074,6 +1162,8 @@ class _SettingsScreenState extends State<_SettingsScreen> {
     child: ListView(
       padding: const EdgeInsets.fromLTRB(36, 126, 36, 28),
       children: [
+        const _ClassicPanel(child: LanguagePicker()),
+        const SizedBox(height: 16),
         _ClassicPanel(
           child: Column(
             children: [
@@ -1153,7 +1243,7 @@ class _AboutScreen extends StatelessWidget {
     child: Padding(
       padding: const EdgeInsets.fromLTRB(36, 160, 36, 28),
       child: _ClassicPanel(
-        child: const Text(
+        child: const GameText(
           'Бұл — минималистік гексагон стратегиясы.\n\n'
           'Жерді жаулап, экономиканы дамытып, әскер, қамал, порт, кеме және артиллерияны тең ұстаңыз.\n\n'
           'Ойын офлайн жұмыс істейді және жарнамасыз.',
@@ -1175,7 +1265,7 @@ class _HelpScreen extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(36, 126, 36, 28),
       children: const [
         _ClassicPanel(
-          child: Text(
+          child: GameText(
             'Негізгі ереже\n\n'
             '• Жер табыс береді, әскер мен құрылыстар шығын жейді.\n'
             '• Әскер өз жерімен 4 ұяшыққа дейін қозғалады.\n'
@@ -1213,7 +1303,7 @@ class _SaveSlotsScreen extends StatelessWidget {
             children: [
               const Padding(
                 padding: EdgeInsets.all(8),
-                child: Text(
+                child: GameText(
                   'Сақтаулар',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 28),
@@ -1235,7 +1325,7 @@ class _SaveSlotsScreen extends StatelessWidget {
               ),
               const Padding(
                 padding: EdgeInsets.all(18),
-                child: Text(
+                child: GameText(
                   'Автосақтау әр толық ход аяқталғаннан кейін жаңарады.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 18),
@@ -1375,7 +1465,7 @@ class _ProgressTransferScreenState extends State<_ProgressTransferScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _ClassicPanel(
-              child: Text(
+              child: GameText(
                 status,
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 20, height: 1.35),
@@ -1493,8 +1583,10 @@ class _MenuBand extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: onTap != null,
-    label: label.replaceAll('\n', ', '),
-    hint: onLongPress == null ? null : 'Ұзақ бассаңыз редакторға көшіріледі',
+    label: context.trNullable(label.replaceAll('\n', ', ')),
+    hint: context.trNullable(
+      onLongPress == null ? null : 'Ұзақ бассаңыз редакторға көшіріледі',
+    ),
     child: AntiyoyPressable(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -1520,7 +1612,7 @@ class _MenuBand extends StatelessWidget {
             ),
             const SizedBox(width: 14),
             Expanded(
-              child: Text(
+              child: GameText(
                 label,
                 style: const TextStyle(
                   fontSize: 16,
@@ -1557,7 +1649,7 @@ class _BackButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: 'Артқа',
+    label: context.trNullable('Артқа'),
     child: AntiyoyPressable(
       onTap: onTap,
       child: Container(
@@ -1586,7 +1678,7 @@ class _TopTextButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: label,
+    label: context.trNullable(label),
     child: AntiyoyPressable(
       onTap: onTap,
       child: Container(
@@ -1595,7 +1687,7 @@ class _TopTextButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 18),
         alignment: Alignment.center,
         decoration: _panelDecoration(color),
-        child: Text(label, style: const TextStyle(fontSize: 20)),
+        child: GameText(label, style: const TextStyle(fontSize: 20)),
       ),
     ),
   );
@@ -1615,7 +1707,7 @@ class _SquareAssetButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: label,
+    label: context.trNullable(label),
     child: AntiyoyPressable(
       onTap: onTap,
       child: Container(
@@ -1645,7 +1737,7 @@ class _SquareIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: label,
+    label: context.trNullable(label),
     child: AntiyoyPressable(
       onTap: onTap,
       child: Container(
@@ -1684,7 +1776,7 @@ class _SetupSlider extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(title, style: const TextStyle(fontSize: 20, height: 1.15)),
+      GameText(title, style: const TextStyle(fontSize: 20, height: 1.15)),
       SizedBox(
         height: 48,
         child: Stack(
@@ -1724,7 +1816,7 @@ class _SetupSlider extends StatelessWidget {
                   color: _paper,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 3),
-                    child: Text(
+                    child: GameText(
                       valueLabel,
                       style: const TextStyle(fontSize: 22, height: 1),
                     ),
@@ -1747,7 +1839,7 @@ class _InlineMoreButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: 'Қосымша',
+    label: context.trNullable('Қосымша'),
     child: AntiyoyPressable(
       onTap: onTap,
       child: Container(
@@ -1758,7 +1850,7 @@ class _InlineMoreButton extends StatelessWidget {
           color: _green,
           borderRadius: BorderRadius.circular(14),
         ),
-        child: const Text(
+        child: const GameText(
           'Қосымша',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
@@ -1850,7 +1942,9 @@ class _PaletteChoice extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     button: true,
     selected: selected,
-    label: value < 0 ? 'Кездейсоқ түс' : '${value + 1}-ойыншы түсі',
+    label: context.trNullable(
+      value < 0 ? 'Кездейсоқ түс' : '${value + 1}-ойыншы түсі',
+    ),
     child: AntiyoyPressable(
       key: ValueKey(value < 0 ? 'player-color-random' : 'player-color-$value'),
       behavior: HitTestBehavior.opaque,
@@ -1917,7 +2011,9 @@ class _LargeToggleRow extends StatelessWidget {
       height: 48,
       child: Row(
         children: [
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 20))),
+          Expanded(
+            child: GameText(label, style: const TextStyle(fontSize: 20)),
+          ),
           Container(
             width: 27,
             height: 27,
@@ -1959,7 +2055,7 @@ class _ClassicSlider extends StatelessWidget {
     children: [
       Align(
         alignment: Alignment.centerLeft,
-        child: Text(title, style: const TextStyle(fontSize: 20)),
+        child: GameText(title, style: const TextStyle(fontSize: 20)),
       ),
       Transform.translate(
         offset: const Offset(0, -6),
@@ -1990,7 +2086,7 @@ class _ClassicSlider extends StatelessWidget {
             ),
             SizedBox(
               width: 100,
-              child: Text(
+              child: GameText(
                 valueLabel,
                 textAlign: TextAlign.right,
                 style: const TextStyle(fontSize: 21),
@@ -2017,7 +2113,9 @@ class _ToggleRow extends StatelessWidget {
       height: 51,
       child: Row(
         children: [
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 21))),
+          Expanded(
+            child: GameText(label, style: const TextStyle(fontSize: 21)),
+          ),
           Container(
             width: 25,
             height: 25,

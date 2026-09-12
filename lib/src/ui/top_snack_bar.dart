@@ -1,3 +1,4 @@
+import '../l10n/game_locale.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -37,7 +38,7 @@ void showTopSnackBar(
               constraints: const BoxConstraints(maxWidth: 520),
               child: Semantics(
                 liveRegion: true,
-                label: message,
+                label: overlayContext.tr(message),
                 child: Material(
                   key: const ValueKey('top-snack-bar'),
                   color: const Color(0xee202020),
@@ -48,7 +49,7 @@ void showTopSnackBar(
                       horizontal: 16,
                       vertical: 11,
                     ),
-                    child: Text(
+                    child: GameText(
                       message,
                       textAlign: TextAlign.center,
                       style: const TextStyle(

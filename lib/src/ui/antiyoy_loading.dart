@@ -1,3 +1,4 @@
+import '../l10n/game_locale.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -75,7 +76,7 @@ class _AntiyoyLoadingOverlayState extends State<AntiyoyLoadingOverlay>
           child: Semantics(
             container: true,
             liveRegion: true,
-            label: widget.semanticsLabel,
+            label: context.trNullable(widget.semanticsLabel),
             child: ExcludeSemantics(
               child: Material(
                 type: MaterialType.transparency,
@@ -109,7 +110,7 @@ class _AntiyoyLoadingOverlayState extends State<AntiyoyLoadingOverlay>
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    const GameText(
                       '...',
                       style: TextStyle(
                         color: Colors.white,

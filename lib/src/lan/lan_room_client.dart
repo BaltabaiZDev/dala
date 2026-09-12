@@ -8,10 +8,17 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../game/game_controller.dart';
 import '../game/models.dart';
 import '../modding/game_mod.dart';
+import '../modding/mod_stack.dart';
 import 'lan_protocol.dart';
 import 'lan_state_patch.dart';
 
 class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
+  LanRoomClient({GameMod? defaultMod, List<GameMod> installedMods = const []})
+    : _defaultMod = defaultMod,
+      _installedMods = List.unmodifiable(installedMods);
+  GameMod? _defaultMod;
+  final List<GameMod> _installedMods;
+  List<ModReference> missingContent = const [];
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
   Timer? _reconnectTimer;
@@ -56,6 +63,8 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
     required String roomCode,
     required String name,
   }) async {
+    _defaultMod ??= await GameMod.loadDefault();
+    missingContent = const [];
     _address = address.trim();
     _roomCode = roomCode.replaceAll(RegExp('[^0-9]'), '');
     _name = sanitizeLanPlayerName(name);
@@ -91,6 +100,10 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
           'protocol': lanProtocolVersion,
           'roomCode': _roomCode,
           'name': _name,
+          'baseHash': _defaultMod!.fingerprint,
+          'installedModHashes': _installedMods
+              .map((m) => m.fingerprint)
+              .toList(),
           if (_token != null) 'token': _token,
         }),
       );
@@ -107,6 +120,13 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
       if (decoded is! Map) return;
       final message = decoded.cast<String, dynamic>();
       switch (message['type']) {
+        case 'contentMismatch':
+          missingContent = ModReference.readList(message['requiredMods']);
+          _terminalClose(
+            message['message'] as String? ?? 'Модтар сәйкес емес.',
+            byHost: false,
+          );
+          return;
         case 'welcome':
           _token = message['token'] as String?;
           participantId = message['participantId'] as String?;
@@ -202,8 +222,20 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
     }
   }
 
-  LanLobbyState? _readLobby(Object? raw) =>
-      raw is Map ? LanLobbyState.fromJson(raw.cast<String, dynamic>()) : null;
+  LanLobbyState? _readLobby(Object? raw) {
+    if (raw is! Map) return null;
+    final next = LanLobbyState.fromJson(raw.cast<String, dynamic>());
+    final resolved = sessionMod?.fingerprint == next.modHash
+        ? sessionMod!
+        : ModStack.resolve(_defaultMod!, _installedMods, next.requiredMods);
+    if (resolved.fingerprint != next.modHash) {
+      throw const FormatException('LAN модының нұсқасы сәйкес емес.');
+    }
+    // Palette and assets must already match in the lobby, before a game state
+    // exists. Merely having the correct rules at gameStarted is too late.
+    sessionMod = resolved;
+    return next;
+  }
 
   void _updateSeatFromLobby() {
     final id = participantId;
@@ -217,15 +249,20 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
 
   void _readState(Object? raw) {
     if (raw is! Map) return;
-    final next = raw.cast<String, dynamic>();
-    final rawMod = next['modSnapshot'];
-    if (rawMod is! Map) throw const FormatException('LAN моды берілмеді.');
-    final nextMod = GameMod.fromJson(rawMod.cast<String, dynamic>());
+    final next = Map<String, dynamic>.from(raw);
+    final nextMod =
+        sessionMod ??
+        ModStack.resolve(
+          _defaultMod!,
+          _installedMods,
+          lobby?.requiredMods ?? const [],
+        );
     if (nextMod.id != next['modId'] ||
         (lobby?.modHash != null && nextMod.fingerprint != lobby!.modHash)) {
       throw const FormatException('LAN модының нұсқасы сәйкес емес.');
     }
     // Parsing here fails closed before the snapshot reaches the renderer.
+    next['modSnapshot'] = nextMod.toJson();
     GameState.fromJson(next);
     sessionMod = nextMod;
     stateJson = next;

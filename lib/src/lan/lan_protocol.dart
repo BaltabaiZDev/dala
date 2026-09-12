@@ -1,7 +1,8 @@
 import '../game/models.dart';
+import '../modding/game_mod.dart';
 
 // Timed military treaties must not be interpreted as eternal by older clients.
-const int lanProtocolVersion = 5;
+const int lanProtocolVersion = 6;
 const int lanDefaultPort = 7358;
 const int lanMaxPlayerNameLength = 20;
 const int lanMaxMessageLength = 512;
@@ -97,6 +98,7 @@ class LanLobbyState {
     this.modHash,
     this.modded = false,
     this.mapName,
+    this.requiredMods = const [],
   });
 
   final String roomCode;
@@ -109,6 +111,7 @@ class LanLobbyState {
   final String? modHash;
   final bool modded;
   final String? mapName;
+  final List<ModReference> requiredMods;
 
   bool get readyToStart {
     final occupied = participants
@@ -134,6 +137,7 @@ class LanLobbyState {
     'modHash': modHash,
     'modded': modded,
     'mapName': mapName,
+    'requiredMods': requiredMods.map((m) => m.toJson()).toList(),
   };
 
   factory LanLobbyState.fromJson(Map<String, dynamic> json) => LanLobbyState(
@@ -153,6 +157,7 @@ class LanLobbyState {
     modHash: json['modHash'] as String?,
     modded: json['modded'] as bool? ?? false,
     mapName: json['mapName'] as String?,
+    requiredMods: ModReference.readList(json['requiredMods']),
   );
 }
 

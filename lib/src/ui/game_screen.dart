@@ -1,3 +1,4 @@
+import '../l10n/game_locale.dart';
 import 'dala_theme.dart';
 import 'dala_art.dart';
 import 'dart:math' as math;
@@ -195,7 +196,7 @@ class _GameScreenState extends State<GameScreen> {
                                 horizontal: 14,
                                 vertical: 7,
                               ),
-                              child: Text(
+                              child: GameText(
                                 !controller.networkConnected
                                     ? 'LAN байланысы қайта орнатылуда…'
                                     : '${controller.playerName(controller.state.turn)} жүріп жатыр',
@@ -472,7 +473,7 @@ class _GameScreenState extends State<GameScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.fromLTRB(18, 15, 18, 13),
                   color: const Color(0xffb7ad50),
-                  child: Text(
+                  child: GameText(
                     title,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
@@ -483,7 +484,7 @@ class _GameScreenState extends State<GameScreen> {
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(22, 21, 22, 22),
-                  child: Text(
+                  child: GameText(
                     message,
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 18, height: 1.15),
@@ -607,7 +608,7 @@ class _GameScreenState extends State<GameScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
+                const GameText(
                   'Доход есебі',
                   style: TextStyle(
                     color: Colors.white,
@@ -622,7 +623,7 @@ class _GameScreenState extends State<GameScreen> {
                     child: Row(
                       children: [
                         Expanded(
-                          child: Text(
+                          child: GameText(
                             row.$1,
                             style: const TextStyle(
                               color: Colors.white,
@@ -630,7 +631,7 @@ class _GameScreenState extends State<GameScreen> {
                             ),
                           ),
                         ),
-                        Text(
+                        GameText(
                           _signed(row.$2),
                           style: TextStyle(
                             color: row.$2 < 0
@@ -647,12 +648,12 @@ class _GameScreenState extends State<GameScreen> {
                 Row(
                   children: [
                     const Expanded(
-                      child: Text(
+                      child: GameText(
                         'Барлығы',
                         style: TextStyle(color: Colors.white, fontSize: 18),
                       ),
                     ),
-                    Text(
+                    GameText(
                       _signed(report.total),
                       style: const TextStyle(
                         color: Colors.white,
@@ -732,12 +733,12 @@ class _DiplomacyRow extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
+                  child: GameText(
                     '${player + 1}-ойыншы',
                     style: const TextStyle(color: Colors.white, fontSize: 18),
                   ),
                 ),
-                Text(
+                GameText(
                   label,
                   style: TextStyle(
                     color: switch (status) {
@@ -760,7 +761,7 @@ class _DiplomacyRow extends StatelessWidget {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(
+                      child: GameText(
                         incoming!.type == DiplomacyProposalType.friendship
                             ? 'Достық ұсынысы'
                             : 'Бітім ұсынысы',
@@ -772,11 +773,11 @@ class _DiplomacyRow extends StatelessWidget {
                     ),
                     TextButton(
                       onPressed: enabled ? () => onResolve(false) : null,
-                      child: const Text('Бас тарту'),
+                      child: const GameText('Бас тарту'),
                     ),
                     FilledButton(
                       onPressed: enabled ? () => onResolve(true) : null,
-                      child: const Text('Қабылдау'),
+                      child: const GameText('Қабылдау'),
                     ),
                   ],
                 ),
@@ -785,7 +786,7 @@ class _DiplomacyRow extends StatelessWidget {
               const SizedBox(height: 8),
               const Align(
                 alignment: Alignment.centerLeft,
-                child: Text(
+                child: GameText(
                   'Ұсыныс жіберілді — жауап келесі жүрісте келеді',
                   style: TextStyle(color: Colors.white60, fontSize: 13),
                 ),
@@ -802,7 +803,7 @@ class _DiplomacyRow extends StatelessWidget {
                                 !(status == DiplomacyStatus.war && cooldown > 0)
                             ? onBetter
                             : null,
-                        child: Text(
+                        child: GameText(
                           status == DiplomacyStatus.war
                               ? cooldown > 0
                                     ? 'Бітім: $cooldown ход'
@@ -820,7 +821,7 @@ class _DiplomacyRow extends StatelessWidget {
                     Expanded(
                       child: OutlinedButton(
                         onPressed: enabled ? onWorse : null,
-                        child: Text(
+                        child: GameText(
                           status == DiplomacyStatus.coalition
                               ? 'Әскери одақты тоқтату'
                               : status == DiplomacyStatus.alliance
@@ -875,7 +876,7 @@ class _IncomeRankingDialog extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
           child: Column(
             children: [
-              const Text(
+              const GameText(
                 'Доход',
                 style: TextStyle(
                   color: DalaTheme.ink,
@@ -943,10 +944,11 @@ class _IncomeRankingDialog extends StatelessWidget {
                                                   child: child,
                                                 ),
                                             child: Semantics(
-                                              label:
-                                                  '${playerNames[player]} доходы: '
-                                                  '${incomes[player]}, '
-                                                  '${revealedPlayers[player] ? 'түсі көрінеді' : 'түсі жасырын'}',
+                                              label: context.trNullable(
+                                                '${playerNames[player]} доходы: '
+                                                '${incomes[player]}, '
+                                                '${revealedPlayers[player] ? 'түсі көрінеді' : 'түсі жасырын'}',
+                                              ),
                                               child: DecoratedBox(
                                                 decoration: BoxDecoration(
                                                   color: revealedPlayers[player]
@@ -968,7 +970,7 @@ class _IncomeRankingDialog extends StatelessWidget {
                                     SizedBox(
                                       height: 35,
                                       child: Center(
-                                        child: Text(
+                                        child: GameText(
                                           '${incomes[player]}',
                                           style: const TextStyle(
                                             color: DalaTheme.ink,
@@ -1016,7 +1018,7 @@ class _AntiyoyDialogBand extends StatelessWidget {
       child: SizedBox(
         height: 58,
         child: Center(
-          child: Text(
+          child: GameText(
             label,
             style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
           ),
@@ -1037,7 +1039,7 @@ class _LanTurnTimerBadge extends StatelessWidget {
     final minutes = seconds ~/ 60;
     final rest = seconds % 60;
     return Semantics(
-      label: 'Ход уақыты: $minutes минут $rest секунд',
+      label: context.trNullable('Ход уақыты: $minutes минут $rest секунд'),
       liveRegion: true,
       child: DecoratedBox(
         decoration: BoxDecoration(
@@ -1056,7 +1058,7 @@ class _LanTurnTimerBadge extends StatelessWidget {
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          child: Text(
+          child: GameText(
             '$minutes:${rest.toString().padLeft(2, '0')}',
             key: const ValueKey('lan-turn-timer'),
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
@@ -1102,7 +1104,7 @@ class _ClassicHud extends StatelessWidget {
                 visible: visible,
                 child: Semantics(
                   button: true,
-                  label: 'Доход рейтингі',
+                  label: context.trNullable('Доход рейтингі'),
                   excludeSemantics: true,
                   child: AntiyoyPressable(
                     onTap: onRanking,
@@ -1128,7 +1130,7 @@ class _ClassicHud extends StatelessWidget {
                 visible: visible,
                 child: Semantics(
                   button: true,
-                  label: 'Доход есебі',
+                  label: context.trNullable('Доход есебі'),
                   child: AntiyoyPressable(
                     onTap: onReport,
                     behavior: HitTestBehavior.opaque,
@@ -1147,7 +1149,7 @@ class _ClassicHud extends StatelessWidget {
               alignment: Alignment.centerRight,
               child: Semantics(
                 button: true,
-                label: 'Мәзір',
+                label: context.trNullable('Мәзір'),
                 child: AntiyoyPressable(
                   onTap: onMenu,
                   behavior: HitTestBehavior.opaque,
@@ -1201,7 +1203,7 @@ class _HudText extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) => Text(
+  Widget build(BuildContext context) => GameText(
     text,
     style: const TextStyle(
       color: DalaTheme.ink,
@@ -1556,7 +1558,7 @@ class _ObjectPanelBadge extends StatelessWidget {
           left: 2,
           right: 2,
           bottom: 3,
-          child: Text(
+          child: GameText(
             status ?? '${level == 1 ? 'I' : 'II'} деңгей',
             maxLines: 1,
             overflow: TextOverflow.fade,
@@ -1583,7 +1585,7 @@ class _AutomaticReloadStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Semantics(
-    label: 'Автоматты оқтау, тұрақты шығын $upkeep',
+    label: context.trNullable('Автоматты оқтау, тұрақты шығын $upkeep'),
     excludeSemantics: true,
     child: SizedBox(
       width: 86,
@@ -1591,7 +1593,7 @@ class _AutomaticReloadStatus extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const _ActionSymbol(symbol: _ContextActionSymbol.reload),
-          const Text(
+          const GameText(
             'Авто оқтау',
             maxLines: 1,
             style: TextStyle(
@@ -1600,7 +1602,7 @@ class _AutomaticReloadStatus extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
-          Text(
+          GameText(
             '−$upkeep/ход',
             style: const TextStyle(
               color: Color(0xffffcdd2),
@@ -1684,9 +1686,11 @@ class _ContextActionItemState extends State<_ContextActionItem>
   Widget build(BuildContext context) => Semantics(
     button: true,
     enabled: widget.available,
-    label: widget.price == null
-        ? widget.semanticsLabel
-        : '${widget.semanticsLabel}, бағасы ${widget.price}',
+    label: context.trNullable(
+      widget.price == null
+          ? widget.semanticsLabel
+          : '${widget.semanticsLabel}, бағасы ${widget.price}',
+    ),
     excludeSemantics: true,
     child: IgnorePointer(
       ignoring: !widget.available,
@@ -1745,7 +1749,7 @@ class _ContextActionItemState extends State<_ContextActionItem>
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 _ActionSymbol(symbol: widget.symbol),
-                Text(
+                GameText(
                   widget.label,
                   maxLines: 1,
                   overflow: TextOverflow.fade,
@@ -1757,7 +1761,7 @@ class _ContextActionItemState extends State<_ContextActionItem>
                   ),
                 ),
                 if (widget.price != null)
-                  Text(
+                  GameText(
                     '\$${widget.price}',
                     style: const TextStyle(
                       color: Color(0xffffe082),
@@ -1865,7 +1869,7 @@ class _SelectedToolPreview extends StatelessWidget {
                     ? _TeamColoredAsset(asset: data.asset, tint: tint)
                     : _NeutralTeamMarkedAsset(asset: data.asset, tint: tint),
               ),
-              Text(
+              GameText(
                 '\$${data.price}',
                 style: const TextStyle(
                   color: Colors.white,
@@ -2006,7 +2010,7 @@ class _BoatCargoPanel extends StatelessWidget {
           Expanded(
             child: boat.cargo.isEmpty
                 ? const Center(
-                    child: Text(
+                    child: GameText(
                       'Кемеде әскер жоқ',
                       style: TextStyle(color: Colors.white54, fontSize: 12),
                     ),
@@ -2050,7 +2054,9 @@ class _CargoUnitItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: '$strength-деңгейлі әскер${ready ? '' : ', келесі ходта дайын'}',
+    label: context.trNullable(
+      '$strength-деңгейлі әскер${ready ? '' : ', келесі ходта дайын'}',
+    ),
     selected: selected,
     excludeSemantics: true,
     child: AntiyoyPressable(
@@ -2084,7 +2090,7 @@ class _CargoUnitItem extends StatelessWidget {
                 left: 0,
                 right: 0,
                 bottom: 1,
-                child: Text(
+                child: GameText(
                   ready ? '$strength' : '…',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
@@ -2126,7 +2132,7 @@ class _CompactBoatItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: '$label, бағасы $price',
+    label: context.trNullable('$label, бағасы $price'),
     excludeSemantics: true,
     child: IgnorePointer(
       ignoring: !enabled,
@@ -2178,7 +2184,7 @@ class _FastBuildItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: '$label, бағасы $price',
+    label: context.trNullable('$label, бағасы $price'),
     excludeSemantics: true,
     child: AntiyoyPressable(
       onTap: enabled ? onTap : onDisabledTap,
@@ -2389,7 +2395,7 @@ class _FloatingIconControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: label,
+    label: context.trNullable(label),
     child: IgnorePointer(
       ignoring: !enabled,
       child: AntiyoyPressable(
@@ -2443,7 +2449,7 @@ class _FloatingAssetControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: label,
+    label: context.trNullable(label),
     child: IgnorePointer(
       ignoring: !enabled,
       child: AntiyoyPressable(
@@ -2494,7 +2500,7 @@ class _ThinkingLabel extends StatelessWidget {
                 ),
               ),
               SizedBox(width: 9),
-              Text(
+              GameText(
                 'Қарсыластар жүріп жатыр',
                 style: TextStyle(color: Colors.white, fontSize: 14),
               ),
@@ -2540,12 +2546,12 @@ class _ThinkingLabel extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 9),
-            Text(
+            GameText(
               'AI ${player + 1} жүрісі',
               style: const TextStyle(color: Colors.white, fontSize: 14),
             ),
             const SizedBox(width: 8),
-            Text(
+            GameText(
               '${(controller.aiProgress * 100).round()}%',
               style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
@@ -2666,7 +2672,7 @@ class _PauseBand extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: label,
+    label: context.trNullable(label),
     child: AntiyoyPressable(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -2682,7 +2688,7 @@ class _PauseBand extends StatelessWidget {
           child: Center(
             child: FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text(
+              child: GameText(
                 label,
                 style: const TextStyle(
                   color: DalaTheme.ink,
@@ -2770,7 +2776,7 @@ class _VictoryOverlay extends StatelessWidget {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(
+                              GameText(
                                 'Жеңімпаз: ${winner + 1}',
                                 style: const TextStyle(fontSize: 30),
                               ),
@@ -2811,7 +2817,7 @@ class _VictoryOverlay extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  Text(
+                  GameText(
                     '${statistics.turns} ход',
                     style: const TextStyle(color: Colors.black54),
                   ),
@@ -2846,7 +2852,7 @@ class _FlatMenuButton extends StatelessWidget {
       height: 58,
       alignment: Alignment.center,
       color: color,
-      child: Text(
+      child: GameText(
         label,
         style: const TextStyle(fontSize: 22, color: Colors.black),
       ),

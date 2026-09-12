@@ -1,3 +1,4 @@
+import '../l10n/game_locale.dart';
 import 'dala_theme.dart';
 import 'package:flutter/material.dart';
 
@@ -25,12 +26,12 @@ class DiplomacyStatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     image: true,
-    label: switch (status) {
+    label: context.trNullable(switch (status) {
       DiplomacyStatus.peace => 'Бейтарап белгісі',
       DiplomacyStatus.alliance => 'Достық белгісі',
       DiplomacyStatus.coalition => 'Әскери одақ белгісі',
       DiplomacyStatus.war => 'Жау белгісі',
-    },
+    }),
     child: CustomPaint(
       size: Size.square(size),
       painter: DiplomacyBadgePainter(status),

@@ -149,7 +149,7 @@ void main() {
         DalaMap.fromState('Екі жағалау', state, mod),
       ),
     );
-    library.activeHash = mod.fingerprint;
+    await library.activate(mod.fingerprint);
     await tester.pumpWidget(
       MaterialApp(
         theme: DalaTheme.light,

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'content_package.dart';
 import 'content_storage.dart';
 import 'game_mod.dart';
+import 'mod_stack.dart';
 
 class InstalledMod {
   InstalledMod(this.path, this.package, {Set<String>? paths})
@@ -33,9 +34,29 @@ class ContentLibrary extends ChangeNotifier {
   final List<InstalledMod> mods = [];
   final List<InstalledMap> maps = [];
   final List<String> errors = [];
-  String? activeHash;
+  List<String> _activeHashes = [];
+  ModStack? _activeStack;
+  List<String> get activeHashes => List.unmodifiable(_activeHashes);
+  String? get activeHash =>
+      _activeHashes.isEmpty ? null : activeMod.fingerprint;
+  List<InstalledMod> get activeMods => [
+    for (final hash in _activeHashes) ...mods.where((m) => m.hash == hash),
+  ];
+  List<ModConflict> get conflicts => activeStack.conflicts;
+  ModStack get activeStack => _activeStack ??= compose(_activeHashes);
+  ModStack compose(List<String> hashes) {
+    final selected = <GameMod>[];
+    for (final hash in hashes) {
+      final entry = mods.where((m) => m.hash == hash).firstOrNull;
+      if (entry == null) throw const FormatException('Мод орнатылмаған.');
+      selected.add(entry.mod);
+    }
+    return ModStack.compose(defaultMod, selected);
+  }
+
   String location = '';
   static const _activeKey = 'dala.content.activeMod';
+  static const _activeListKey = 'dala.content.activeMods';
   bool _disposed = false;
   @override
   void dispose() {
@@ -47,21 +68,21 @@ class ContentLibrary extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  GameMod get activeMod =>
-      mods.where((m) => m.hash == activeHash).firstOrNull?.mod ?? defaultMod;
+  GameMod get activeMod => activeStack.mod;
 
   Future<void> refresh() async {
     mods.clear();
     maps.clear();
     errors.clear();
     final prefs = await SharedPreferences.getInstance();
-    activeHash = prefs.getString(_activeKey);
+    final legacy = prefs.getString(_activeKey);
+    final requested = prefs.getStringList(_activeListKey) ?? [?legacy];
     try {
       location = await storage.location();
       final files = await storage.readAll();
       for (final entry in files.entries) {
         try {
-          if (entry.key.toLowerCase().endsWith('.dalamod')) {
+          if (ContentPackage.isModFile(entry.key)) {
             final package = await compute(_decodeMod, entry.value);
             await validateImages(package.mod);
             final installed = InstalledMod(entry.key, package);
@@ -106,32 +127,67 @@ class ContentLibrary extends ChangeNotifier {
             !seenMaps.add('${entry.packageHash}:${entry.map.fingerprint}'),
       );
       maps.sort((a, b) => a.map.name.compareTo(b.map.name));
-      if (activeHash != null && !mods.any((m) => m.hash == activeHash)) {
-        errors.add('Қосылған мод табылмады. Жаңа ойын кәдімгі режимге қайтты.');
-        activeHash = null;
-        await prefs.remove(_activeKey);
+      final seenIds = <String>{};
+      _activeHashes = [
+        for (final hash in requested)
+          if (mods.any((m) => m.hash == hash) &&
+              seenIds.add(mods.firstWhere((m) => m.hash == hash).mod.id))
+            hash,
+      ];
+      if (_activeHashes.length != requested.length) {
+        errors.add(
+          'Кейбір қосылған модтар табылмады. Модтар тізімін тексеріңіз.',
+        );
       }
+      _activeStack = compose(_activeHashes);
+      await prefs.setStringList(_activeListKey, _activeHashes);
+      await prefs.remove(_activeKey);
     } on Object catch (error) {
+      _activeHashes = [];
+      _activeStack = ModStack(defaultMod, const []);
       errors.add('Кітапхана ашылмады: $error');
     }
     _changed();
   }
 
-  Future<void> activate(String? hash) async {
-    if (hash != null && !mods.any((m) => m.hash == hash)) {
-      throw const FormatException('Мод орнатылмаған.');
-    }
+  Future<void> activate(String? hash) => setActiveMods([?hash]);
+
+  Future<void> setEnabled(String hash, bool enabled) async {
+    final entry = mods.firstWhere((m) => m.hash == hash);
+    final next = [..._activeHashes]
+      ..removeWhere(
+        (h) =>
+            h == hash ||
+            (enabled &&
+                mods.any((m) => m.hash == h && m.mod.id == entry.mod.id)),
+      );
+    if (enabled) next.add(hash);
+    await setActiveMods(next);
+  }
+
+  Future<void> moveMod(String hash, int direction) async {
+    final next = [..._activeHashes];
+    final from = next.indexOf(hash);
+    final to = from + direction;
+    if (from < 0 || to < 0 || to >= next.length) return;
+    next.removeAt(from);
+    next.insert(to, hash);
+    await setActiveMods(next);
+  }
+
+  Future<void> setActiveMods(List<String> hashes) async {
+    final stack = compose(hashes);
     final prefs = await SharedPreferences.getInstance();
-    final ok = hash == null
-        ? await prefs.remove(_activeKey)
-        : await prefs.setString(_activeKey, hash);
+    final ok = await prefs.setStringList(_activeListKey, hashes);
     if (!ok) throw const FormatException('Мод таңдауын сақтау мүмкін болмады.');
-    activeHash = hash;
+    _activeHashes = [...hashes];
+    _activeStack = stack;
+    await prefs.remove(_activeKey);
     _changed();
   }
 
   Future<void> importFile(String name, Uint8List bytes) async {
-    if (name.toLowerCase().endsWith('.dalamod')) {
+    if (ContentPackage.isModFile(name)) {
       final package = await compute(_decodeMod, bytes);
       await validateImages(package.mod);
       // Maps can change without changing the rules/sprite fingerprint. Keep
@@ -149,7 +205,7 @@ class ContentLibrary extends ChangeNotifier {
       );
     } else {
       throw const FormatException(
-        'DALA үшін .dalamod немесе .dalamap файлын таңдаңыз.',
+        'DALA үшін .dalamod, .zip немесе .dalamap файлын таңдаңыз.',
       );
     }
     await refresh();
@@ -165,6 +221,21 @@ class ContentLibrary extends ChangeNotifier {
 
   GameMod? modForMap(InstalledMap entry) {
     if (entry.map.modId == defaultMod.id) return defaultMod;
+    if (entry.map.requiredMods.isNotEmpty) {
+      try {
+        final mod = ModStack.resolve(
+          defaultMod,
+          mods.map((m) => m.mod),
+          entry.map.requiredMods,
+        );
+        return mod.id == entry.map.modId &&
+                mod.fingerprint == entry.map.requiredModHash
+            ? mod
+            : null;
+      } on FormatException {
+        return null;
+      }
+    }
     return mods
         .where(
           (m) =>

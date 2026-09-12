@@ -15,7 +15,7 @@ void main() {
       probe.cache.setViewport(const ui.Rect.fromLTWH(0, 0, 800, 800), 2);
       probe.draw(1, regions: true, dirty: null);
       await probe.drain();
-      expect(probe.detailRecords, 4);
+      expect(probe.detailRecords, 5); // viewport fallback plus four textures
       expect(probe.fullRecords, 0);
       expect(probe.cache.textureCount, 5);
       final calls = probe.calls;
@@ -28,7 +28,7 @@ void main() {
       expect(probe.cache.hasDetailAt(const ui.Offset(700, 700)), isTrue);
       await probe.drain();
       expect(probe.calls - calls, 2); // one overview plus one changed tile
-      expect(probe.detailRecords, 5);
+      expect(probe.detailRecords, 7); // refreshed viewport plus changed texture
       expect(probe.cache.textureCount, 5);
       probe.cache.dispose();
     },
@@ -143,6 +143,40 @@ void main() {
       probe.cache.dispose();
     },
   );
+
+  test(
+    'startup fallback is culled and memory pressure cannot refill detail',
+    () async {
+      final probe = _RasterProbe(maxDetailBytes: 32 * 1024 * 1024);
+      const view = ui.Rect.fromLTWH(200, 200, 100, 100);
+      probe.cache.setViewport(view, 2);
+      probe.draw(1, regions: true);
+      expect(probe.recordedRegions.single, view);
+      expect(probe.fullRecords, 0);
+      await probe.drain();
+      expect(probe.cache.textureCount, greaterThan(1));
+      final beforeBytes = probe.cache.textureBytes;
+      final beforeCalls = probe.calls;
+      probe.cache.trimMemory();
+      expect(probe.cache.textureBytes, lessThan(beforeBytes));
+      expect(probe.cache.textureCount, 1);
+      await probe.drain();
+      expect(probe.cache.textureCount, 1);
+      for (var i = 0; i < 10; i++) {
+        probe.cache.setViewport(view.shift(ui.Offset(i * 20, 0)), 2);
+        probe.draw(1, regions: true);
+      }
+      await probe.drain();
+      expect(probe.cache.textureCount, 1);
+      expect(probe.cache.hasDetailAt(view.center), isFalse);
+      expect(
+        probe.calls,
+        beforeCalls,
+        reason: 'Memory pressure must not reallocate an existing overview',
+      );
+      probe.cache.dispose();
+    },
+  );
 }
 
 class _RasterProbe {
@@ -174,6 +208,7 @@ class _RasterProbe {
   int calls = 0;
   int detailRecords = 0;
   int fullRecords = 0;
+  final recordedRegions = <ui.Rect>[];
 
   ui.Picture? draw(
     int signature, {
@@ -200,6 +235,7 @@ class _RasterProbe {
       recordRegion: regions
           ? (canvas, bounds) {
               detailRecords++;
+              recordedRegions.add(bounds);
               canvas.drawRect(bounds, ui.Paint()..color = backgroundColor);
             }
           : null,

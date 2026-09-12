@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -14,16 +15,18 @@ typedef MapRasterizer =
 class MapRasterCache extends ChangeNotifier {
   MapRasterCache({
     this.maxDetailBytes = 48 * 1024 * 1024,
+    this.tileSize = 512,
+    this.overviewExtent = 1536,
     this.backgroundColor = const ui.Color(0xff365c68),
     MapRasterizer? rasterizer,
     void Function(VoidCallback)? schedule,
   }) : _rasterizer = rasterizer ?? _toImage,
        _schedule = schedule ?? _afterFrame;
 
-  static const tileSize = 512.0;
+  final double tileSize;
   // The overview is deliberately lower detail: at this zoom objects are tiny,
   // while halving texture area avoids a visible GPU upload pause on phones.
-  static const overviewExtent = 1536.0;
+  final double overviewExtent;
   final int maxDetailBytes;
   final ui.Color backgroundColor;
   final MapRasterizer _rasterizer;
@@ -45,6 +48,7 @@ class MapRasterCache extends ChangeNotifier {
   bool _disposed = false;
   bool _rasterEnabled = false;
   bool _active = true;
+  bool _memoryConstrained = false;
   int builds = 0;
 
   @visibleForTesting
@@ -65,8 +69,34 @@ class MapRasterCache extends ChangeNotifier {
     if (active) _requestJob();
   }
 
-  static Future<ui.Image> _toImage(ui.Picture p, int w, int h) =>
-      p.toImage(w, h);
+  // Terrain and action-mask caches share one GPU allocation queue. Serial
+  // work within each individual cache alone still allowed concurrent peaks.
+  static Future<void> _rasterQueue = Future<void>.value();
+  static Future<ui.Image> _toImage(ui.Picture p, int w, int h) {
+    final result = Completer<ui.Image>();
+    _rasterQueue = _rasterQueue.then((_) async {
+      try {
+        result.complete(await p.toImage(w, h));
+      } on Object catch (error, stack) {
+        result.completeError(error, stack);
+      }
+    });
+    return result.future;
+  }
+
+  /// Keep gameplay available after Android's low-memory notification, without
+  /// immediately allocating the same detail textures again on the next frame.
+  void trimMemory() {
+    if (_disposed) return;
+    _memoryConstrained = true;
+    _epoch++;
+    _failedEpoch = null;
+    // Retain the tiny overview: discarding it forces complex vector fallback
+    // and a new GPU allocation at exactly the moment memory is scarce.
+    _clearDetailTextures();
+    notifyListeners();
+    _requestJob();
+  }
 
   static void _afterFrame(VoidCallback callback) {
     SchedulerBinding.instance.addPostFrameCallback((_) => callback());
@@ -76,7 +106,7 @@ class MapRasterCache extends ChangeNotifier {
   double get _overviewScale =>
       math.min(1, overviewExtent / math.max(1, _size.longestSide));
 
-  int get _level => _pixelScale <= _overviewScale * 1.35
+  int get _level => _memoryConstrained || _pixelScale <= _overviewScale * 1.35
       ? 0
       : _pixelScale <= 1.15
       ? 1
@@ -90,7 +120,10 @@ class MapRasterCache extends ChangeNotifier {
     final oldLevel = _level;
     _view = view;
     _pixelScale = pixelScale;
-    if (_rasterEnabled && oldLevel != _level) notifyListeners();
+    if (_rasterEnabled &&
+        (oldLevel != _level || _overview == null || _failedEpoch == _epoch)) {
+      notifyListeners();
+    }
     _requestJob();
   }
 
@@ -150,9 +183,19 @@ class MapRasterCache extends ChangeNotifier {
     final overview = _overview;
     if (!_rasterEnabled || overview == null) {
       // Always current terrain/fog while the new epoch is being prepared.
-      canvas.drawPicture(
-        _rasterEnabled ? _overviewPicture ?? _picture! : _picture!,
-      );
+      if (_rasterEnabled && _recordRegion != null && !_view.isEmpty) {
+        // A full vector overview at the initial close zoom can allocate GPU
+        // geometry for thousands of offscreen curved cells before toImage
+        // finishes. Only draw the actual viewport while textures are pending.
+        canvas.save();
+        canvas.clipRect(_view);
+        _recordRegion!(canvas, _view);
+        canvas.restore();
+      } else {
+        canvas.drawPicture(
+          _rasterEnabled ? _overviewPicture ?? _picture! : _picture!,
+        );
+      }
     } else {
       // Transparent overlays must not be blended twice where a detail tile
       // replaces the overview. Rectangular holes are cheap to clip.
@@ -308,6 +351,7 @@ class MapRasterCache extends ChangeNotifier {
       if (!_disposed && epoch == _epoch) {
         _failedEpoch = epoch;
         debugPrint('Map pixel cache fell back to vectors: $error');
+        notifyListeners();
       }
     } finally {
       picture.dispose();
@@ -319,6 +363,10 @@ class MapRasterCache extends ChangeNotifier {
   void _clearTextures() {
     _overview?.image.dispose();
     _overview = null;
+    _clearDetailTextures();
+  }
+
+  void _clearDetailTextures() {
     for (final texture in _tiles.values) {
       texture.image.dispose();
     }

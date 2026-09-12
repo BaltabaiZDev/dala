@@ -3,6 +3,60 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:crypto/crypto.dart';
 
+class ModReference {
+  const ModReference({
+    required this.id,
+    required this.name,
+    required this.version,
+    required this.hash,
+  });
+  final String id;
+  final String name;
+  final int version;
+  final String hash;
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'version': version,
+    'hash': hash,
+  };
+  factory ModReference.fromJson(Map<String, dynamic> json) {
+    if (json['id'] is! String ||
+        !(RegExp(
+          r'^[a-z0-9][a-z0-9_-]{0,63}$',
+        ).hasMatch(json['id'] as String)) ||
+        json['name'] is! String ||
+        (json['name'] as String).length > 80 ||
+        json['version'] is! int ||
+        (json['version'] as int) < 1 ||
+        json['hash'] is! String ||
+        !RegExp(r'^[a-f0-9]{64}$').hasMatch(json['hash'] as String)) {
+      throw const FormatException('Мод нұсқасының сипаттамасы жарамсыз.');
+    }
+    return ModReference(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      version: json['version'] as int,
+      hash: json['hash'] as String,
+    );
+  }
+  static List<ModReference> readList(Object? raw) {
+    if (raw == null) return const [];
+    if (raw is! List || raw.length > 32 || raw.any((v) => v is! Map)) {
+      throw const FormatException('Модтар тізімі жарамсыз.');
+    }
+    final values = raw
+        .map((v) => ModReference.fromJson(Map<String, dynamic>.from(v as Map)))
+        .toList();
+    if (values.map((v) => v.id).toSet().length != values.length) {
+      throw const FormatException(
+        'Бір модтың екі нұсқасын қатар қосуға болмайды.',
+      );
+    }
+    return List.unmodifiable(values);
+  }
+}
+
 class GameRules {
   const GameRules({
     required this.unitMoveLimit,
@@ -276,6 +330,7 @@ class GameMod {
     this.sprites = const {},
     this.author = '',
     this.description = '',
+    this.components = const [],
   });
 
   final String id;
@@ -289,6 +344,14 @@ class GameMod {
   final Map<String, String> sprites;
   final String author;
   final String description;
+  final List<ModReference> components;
+  ModReference get reference =>
+      ModReference(id: id, name: name, version: version, hash: fingerprint);
+  List<ModReference> get requirements => components.isNotEmpty
+      ? components
+      : id == 'classic_steppe'
+      ? const []
+      : [reference];
 
   static final _fingerprints = Expando<String>();
   String get fingerprint =>
@@ -316,6 +379,8 @@ class GameMod {
     if (sprites.isNotEmpty) 'sprites': sprites,
     if (author.isNotEmpty) 'author': author,
     if (description.isNotEmpty) 'description': description,
+    if (components.isNotEmpty)
+      'components': components.map((m) => m.toJson()).toList(),
   };
 
   static Future<GameMod> loadDefault() =>
@@ -415,6 +480,7 @@ class GameMod {
       sprites: Map.unmodifiable(sprites),
       author: text('author', 80),
       description: text('description', 1000),
+      components: ModReference.readList(json['components']),
     );
     _fingerprints[mod] = mod.fingerprint;
     return mod;

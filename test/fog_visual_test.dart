@@ -9,6 +9,7 @@ import 'package:antiyoy_self/src/modding/game_mod.dart';
 import 'package:antiyoy_self/src/persistence/save_repository.dart';
 import 'package:antiyoy_self/src/ui/game_screen.dart';
 import 'package:antiyoy_self/src/ui/hex_board.dart';
+import 'package:antiyoy_self/src/ui/map_viewport.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -234,6 +235,17 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 100));
     }
+    final view = tester.widget<MapViewport>(find.byType(MapViewport));
+    final transform = view.transformationController.value;
+    final boatPosition =
+        HexBoard.centerOfWater(state, cell) * transform.entry(0, 0) +
+        Offset(transform.entry(0, 3), transform.entry(1, 3));
+    expect(
+      (Offset.zero & tester.getSize(find.byType(MapViewport))).contains(
+        boatPosition,
+      ),
+      isTrue,
+    );
     await expectLater(
       find.byType(GameScreen),
       matchesGoldenFile('visual_smoke_fog_boat_landing.png'),

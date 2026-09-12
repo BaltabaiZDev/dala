@@ -16,6 +16,13 @@ class ContentPackage {
   static const maxBytes = 16 * 1024 * 1024;
   static const maxExpandedBytes = 32 * 1024 * 1024;
 
+  /// File managers may append .zip when saving or compressing a mod package.
+  /// The archive's manifest is still validated before anything is installed.
+  static bool isModFile(String name) {
+    final lower = name.toLowerCase();
+    return lower.endsWith('.dalamod') || lower.endsWith('.zip');
+  }
+
   static ContentPackage decode(Uint8List bytes) {
     if (bytes.length > maxBytes) {
       throw const FormatException('Пакет 16 МБ-тан үлкен.');
@@ -64,6 +71,23 @@ class ContentPackage {
         }
         files[path] = file;
       }
+      // Desktop/mobile archivers often wrap the selected folder itself.
+      // Accept one shared wrapper, after validating every original path above.
+      if (!files.containsKey('mod.json') && files.isNotEmpty) {
+        final wrapper = files.keys.first.split('/').first;
+        final prefix = '$wrapper/';
+        if (wrapper.isNotEmpty &&
+            files.containsKey('${prefix}mod.json') &&
+            files.keys.every((path) => path.startsWith(prefix))) {
+          final unwrapped = {
+            for (final entry in files.entries)
+              entry.key.substring(prefix.length): entry.value,
+          };
+          files
+            ..clear()
+            ..addAll(unwrapped);
+        }
+      }
       final manifest = files['mod.json'];
       if (manifest == null || manifest.size > 256 * 1024) {
         throw const FormatException('Пакеттің түбінде mod.json болуы керек.');
@@ -89,7 +113,8 @@ class ContentPackage {
             ),
       };
       final mod = GameMod.fromJson(raw);
-      if (mod.id == 'classic_steppe' ||
+      if (mod.components.isNotEmpty ||
+          mod.id == 'classic_steppe' ||
           !RegExp(r'^[a-z0-9][a-z0-9_-]{0,63}$').hasMatch(mod.id)) {
         throw const FormatException(
           'Модқа жеке id беріңіз: a–z, 0–9, _ немесе -.',
@@ -152,10 +177,12 @@ class DalaMap {
     required this.name,
     required this.stateJson,
     this.requiredModHash,
+    this.requiredMods = const [],
   });
   final String name;
   final Map<String, dynamic> stateJson;
   final String? requiredModHash;
+  final List<ModReference> requiredMods;
   String get modId => stateJson['modId'] as String;
   String get fingerprint => sha256.convert(encode()).toString();
 
@@ -174,6 +201,7 @@ class DalaMap {
       name: _name(name),
       stateJson: state.toJson()..remove('modSnapshot'),
       requiredModHash: mod.id == 'classic_steppe' ? null : mod.fingerprint,
+      requiredMods: mod.requirements,
     );
   }
 
@@ -213,6 +241,7 @@ class DalaMap {
         name: _name(raw['name']),
         stateJson: state,
         requiredModHash: hash as String?,
+        requiredMods: ModReference.readList(raw['requiredMods']),
       );
       if (EditorRepository.decodeStateJson(
             state,
@@ -264,6 +293,8 @@ class DalaMap {
         'version': 1,
         'name': name,
         if (requiredModHash != null) 'requiredModHash': requiredModHash,
+        if (requiredMods.isNotEmpty)
+          'requiredMods': requiredMods.map((m) => m.toJson()).toList(),
         'state': stateJson,
       }),
     ),

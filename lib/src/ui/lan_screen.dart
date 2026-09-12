@@ -1,3 +1,4 @@
+import '../l10n/game_locale.dart';
 import 'dala_theme.dart';
 import 'dart:async';
 import 'dart:math' as math;
@@ -14,6 +15,7 @@ import '../lan/lan_room_host.dart';
 import '../lan/lan_server_factory.dart';
 import '../modding/game_mod.dart';
 import '../modding/content_library.dart';
+import '../modding/mod_stack.dart';
 import '../persistence/save_repository.dart';
 import '../persistence/settings_repository.dart';
 import 'antiyoy_background.dart';
@@ -49,15 +51,20 @@ class _LanScreenState extends State<LanScreen> {
   final TextEditingController _roomCode = TextEditingController();
   bool _working = false;
   late bool _useMod;
-  GameMod? _selectedMod;
+  List<String> _selectedHashes = [];
+  ModStack? _roomStack;
   InstalledMap? _selectedMap;
   GameMod get _roomMod =>
-      _useMod ? _selectedMod ?? widget.mod : widget.defaultMod ?? widget.mod;
+      _useMod ? _roomStack?.mod ?? widget.mod : widget.defaultMod ?? widget.mod;
 
   @override
   void initState() {
     super.initState();
     _useMod = widget.mod.id != 'classic_steppe';
+    _selectedHashes = [...?widget.library?.activeHashes];
+    if (widget.library != null) {
+      _roomStack = widget.library!.compose(_selectedHashes);
+    }
     final browserHost = Uri.base.host;
     _address.text = browserHost.isNotEmpty && browserHost != 'localhost'
         ? '$browserHost:$lanDefaultPort'
@@ -138,7 +145,12 @@ class _LanScreenState extends State<LanScreen> {
       showTopSnackBar(context, '6 саннан тұратын бөлме кодын жазыңыз.');
       return;
     }
-    final client = LanRoomClient();
+    final client = LanRoomClient(
+      defaultMod: widget.defaultMod ?? widget.library?.defaultMod,
+      installedMods: [
+        for (final entry in widget.library?.mods ?? <InstalledMod>[]) entry.mod,
+      ],
+    );
     setState(() => _working = true);
     try {
       await client.connect(
@@ -159,13 +171,111 @@ class _LanScreenState extends State<LanScreen> {
           ),
         ),
       );
-      if (mounted && client.closedByHost && client.error != null) {
+      if (mounted && client.error != null) {
         showTopSnackBar(context, client.error!);
       }
     } finally {
       await client.close();
       if (mounted) setState(() => _working = false);
     }
+  }
+
+  Future<void> _selectMods() async {
+    final library = widget.library;
+    if (library == null) return;
+    final result = await showDialog<List<String>>(
+      context: context,
+      builder: (context) {
+        final selected = [..._selectedHashes];
+        return StatefulBuilder(
+          builder: (context, refresh) => AlertDialog(
+            title: const GameText('Бөлме модтары'),
+            content: SizedBox(
+              width: 360,
+              height: 320,
+              child: ListView(
+                children: [
+                  const GameText('Барлық ойыншыда осы модтар орнатылуы керек.'),
+                  const SizedBox(height: 8),
+                  for (final entry in [
+                    for (final hash in selected)
+                      library.mods.firstWhere((m) => m.hash == hash),
+                    ...library.mods.where((m) => !selected.contains(m.hash)),
+                  ])
+                    CheckboxListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: GameText(entry.mod.name, translate: false),
+                      subtitle: GameText('v${entry.mod.version}'),
+                      secondary: selected.contains(entry.hash)
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                GameText('${selected.indexOf(entry.hash) + 1}'),
+                                IconButton(
+                                  tooltip: context.tr('Жоғары'),
+                                  iconSize: 18,
+                                  onPressed: selected.indexOf(entry.hash) == 0
+                                      ? null
+                                      : () => refresh(() {
+                                          final index = selected.indexOf(
+                                            entry.hash,
+                                          );
+                                          selected.removeAt(index);
+                                          selected.insert(
+                                            index - 1,
+                                            entry.hash,
+                                          );
+                                        }),
+                                  icon: const Icon(Icons.arrow_upward),
+                                ),
+                              ],
+                            )
+                          : null,
+                      value: selected.contains(entry.hash),
+                      onChanged: (on) => refresh(() {
+                        selected.removeWhere(
+                          (h) =>
+                              h == entry.hash ||
+                              (on == true &&
+                                  library.mods.any(
+                                    (m) =>
+                                        m.hash == h && m.mod.id == entry.mod.id,
+                                  )),
+                        );
+                        if (on == true) selected.add(entry.hash);
+                      }),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const GameText('Бас тарту'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  try {
+                    library.compose(selected);
+                    Navigator.pop(context, selected);
+                  } on Object catch (error) {
+                    showTopSnackBar(context, error.toString());
+                  }
+                },
+                child: const GameText('Қолдану'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _selectedHashes = result;
+      _roomStack = library.compose(result);
+      _selectedMap = null;
+    });
   }
 
   @override
@@ -189,8 +299,8 @@ class _LanScreenState extends State<LanScreen> {
                 const SizedBox(height: 18),
                 SegmentedButton<bool>(
                   segments: const [
-                    ButtonSegment(value: false, label: Text('Кәдімгі')),
-                    ButtonSegment(value: true, label: Text('Модпен')),
+                    ButtonSegment(value: false, label: GameText('Кәдімгі')),
+                    ButtonSegment(value: true, label: GameText('Модпен')),
                   ],
                   selected: {_useMod},
                   onSelectionChanged: _working
@@ -202,34 +312,25 @@ class _LanScreenState extends State<LanScreen> {
                 ),
                 if (_useMod) ...[
                   const SizedBox(height: 10),
-                  if (widget.library?.mods.isNotEmpty ?? false)
-                    DropdownButtonFormField<GameMod>(
-                      initialValue: _roomMod.id == 'classic_steppe'
-                          ? null
-                          : _roomMod,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Бөлме моды',
+                  if (widget.library?.mods.isNotEmpty ?? false) ...[
+                    for (final ref in _roomMod.requirements)
+                      GameText(
+                        ref.name,
+                        translate: false,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      items: [
-                        for (final entry in widget.library!.mods)
-                          DropdownMenuItem(
-                            value: entry.mod,
-                            child: Text(
-                              entry.mod.name,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
-                      onChanged: _working
-                          ? null
-                          : (value) => setState(() {
-                              _selectedMod = value;
-                              _selectedMap = null;
-                            }),
-                    )
-                  else
-                    const Text(
+                    TextButton.icon(
+                      onPressed: _working ? null : _selectMods,
+                      icon: const Icon(Icons.tune, size: 18),
+                      label: const GameText('Модтарды таңдау'),
+                    ),
+                    const GameText(
+                      'Барлық ойыншыда бірдей модтар болуы керек.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ] else
+                    const GameText(
                       'Алдымен «Модтар мен карталар» бөлімінде мод орнатыңыз.',
                     ),
                 ],
@@ -238,11 +339,11 @@ class _LanScreenState extends State<LanScreen> {
                   key: ValueKey((_roomMod.fingerprint, _useMod)),
                   initialValue: _selectedMap,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Карта'),
+                  decoration: const InputDecoration(label: GameText('Карта')),
                   items: [
                     const DropdownMenuItem(
                       value: null,
-                      child: Text('Кездейсоқ карта'),
+                      child: GameText('Кездейсоқ карта'),
                     ),
                     for (final entry
                         in widget.library?.maps ?? <InstalledMap>[])
@@ -250,7 +351,7 @@ class _LanScreenState extends State<LanScreen> {
                           _roomMod.fingerprint)
                         DropdownMenuItem(
                           value: entry,
-                          child: Text(
+                          child: GameText(
                             entry.map.name,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -272,7 +373,7 @@ class _LanScreenState extends State<LanScreen> {
                 ),
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 18),
-                  child: Text(
+                  child: GameText(
                     'немесе бөлмеге кіріңіз',
                     style: TextStyle(fontSize: 15, color: Colors.black54),
                   ),
@@ -303,7 +404,7 @@ class _LanScreenState extends State<LanScreen> {
                   onTap: _join,
                 ),
                 const SizedBox(height: 16),
-                const Text(
+                const GameText(
                   'Барлық құрылғы бір Wi‑Fi немесе жергілікті желіде болуы керек. '
                   'Хост ойын күйін, AI жүрістерін, сақтауды және бөлме орындарын басқарады.',
                   textAlign: TextAlign.center,
@@ -410,11 +511,17 @@ class _LanHostLobbyState extends State<_LanHostLobby> {
             _LanPanel(
               child: Column(
                 children: [
-                  Text(
+                  GameText(
                     '${host.lobby.modded ? 'Модпен' : 'Кәдімгі'} · ${host.lobby.modName}',
                   ),
-                  if (host.mapName != null) Text('Карта: ${host.mapName}'),
-                  const Text('Бөлме коды', style: TextStyle(fontSize: 15)),
+                  if (host.mapName != null) GameText('Карта: ${host.mapName}'),
+                  for (var i = 0; i < host.lobby.requiredMods.length; i++)
+                    GameText(
+                      '${i + 1}. ${host.lobby.requiredMods[i].name} · v${host.lobby.requiredMods[i].version}',
+                      translate: false,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  const GameText('Бөлме коды', style: TextStyle(fontSize: 15)),
                   SelectableText(
                     host.roomCode,
                     key: const ValueKey('lan-host-room-code'),
@@ -433,7 +540,7 @@ class _LanHostLobbyState extends State<_LanHostLobby> {
                       },
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 5),
-                        child: Text(
+                        child: GameText(
                           address,
                           style: const TextStyle(
                             fontSize: 18,
@@ -449,7 +556,7 @@ class _LanHostLobbyState extends State<_LanHostLobby> {
             _LanPanel(
               child: Column(
                 children: [
-                  const Text(
+                  const GameText(
                     'Ойыншылар',
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
                   ),
@@ -477,7 +584,7 @@ class _LanHostLobbyState extends State<_LanHostLobby> {
                   Row(
                     children: [
                       const Expanded(
-                        child: Text(
+                        child: GameText(
                           'Ход таймері',
                           style: TextStyle(
                             fontSize: 21,
@@ -493,7 +600,7 @@ class _LanHostLobbyState extends State<_LanHostLobby> {
                       ),
                     ],
                   ),
-                  Text(
+                  GameText(
                     'Бұл карта үшін минимум: '
                     '${host.minimumTurnDurationSeconds ~/ 60} мин',
                     style: const TextStyle(fontSize: 14, color: Colors.black54),
@@ -504,7 +611,7 @@ class _LanHostLobbyState extends State<_LanHostLobby> {
                       key: const ValueKey('lan-turn-duration'),
                       initialValue: host.turnDurationSeconds,
                       decoration: const InputDecoration(
-                        labelText: 'Әр ойыншыға берілетін уақыт',
+                        label: GameText('Әр ойыншыға берілетін уақыт'),
                         filled: true,
                         fillColor: Colors.white70,
                         border: OutlineInputBorder(),
@@ -515,7 +622,7 @@ class _LanHostLobbyState extends State<_LanHostLobby> {
                         ))
                           DropdownMenuItem<int>(
                             value: seconds,
-                            child: Text('${seconds ~/ 60} минут'),
+                            child: GameText('${seconds ~/ 60} минут'),
                           ),
                       ],
                       onChanged: (value) {
@@ -656,9 +763,11 @@ class _LanClientLobbyState extends State<_LanClientLobby> {
           _LanPanel(
             child: Column(
               children: [
-                Text(
+                GameText(
                   client.status == LanConnectionStatus.reconnecting
                       ? 'Қайта қосылуда…'
+                      : client.status == LanConnectionStatus.closed
+                      ? 'Қосылу тоқтатылды'
                       : lobby == null
                       ? 'Хост жауабы күтілуде…'
                       : 'Бөлме ${lobby.roomCode}',
@@ -669,17 +778,37 @@ class _LanClientLobbyState extends State<_LanClientLobby> {
                 ),
                 if (client.error != null) ...[
                   const SizedBox(height: 10),
-                  Text(
+                  GameText(
                     client.error!,
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Color(0xff9a3129)),
                   ),
                 ],
+                if (client.missingContent.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const GameText(
+                    'Бөлме модтары',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  for (final ref in client.missingContent)
+                    GameText(
+                      '${ref.name} · v${ref.version}',
+                      translate: false,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                ],
                 if (lobby != null) ...[
-                  Text(
+                  GameText(
                     "${lobby.modded ? 'Модпен' : 'Кәдімгі'} · ${lobby.modName}",
                   ),
-                  if (lobby.mapName != null) Text('Карта: ${lobby.mapName}'),
+                  if (lobby.mapName != null)
+                    GameText('Карта: ${lobby.mapName}'),
+                  for (var i = 0; i < lobby.requiredMods.length; i++)
+                    GameText(
+                      '${i + 1}. ${lobby.requiredMods[i].name} · v${lobby.requiredMods[i].version}',
+                      translate: false,
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   const SizedBox(height: 14),
                   for (var seat = 0; seat < lobby.config.humanCount; seat++)
                     _ClientSeatRow(
@@ -696,7 +825,7 @@ class _LanClientLobbyState extends State<_LanClientLobby> {
                       isMe: seat == client.seat,
                     ),
                   const SizedBox(height: 14),
-                  Text(
+                  GameText(
                     lobby.turnTimerEnabled
                         ? 'Ход уақыты: ${lobby.turnDurationSeconds ~/ 60} минут'
                         : 'Ход таймері өшірулі',
@@ -704,7 +833,7 @@ class _LanClientLobbyState extends State<_LanClientLobby> {
                     style: const TextStyle(fontSize: 15),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  const GameText(
                     'Картаны және ойынды хост бастайды',
                     style: TextStyle(fontSize: 16),
                   ),
@@ -748,13 +877,13 @@ class _HostSeatRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Text(
+          GameText(
             '${seat + 1}',
             style: const TextStyle(fontWeight: FontWeight.w900),
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
+            child: GameText(
               player == null
                   ? 'Бос орын'
                   : '${player.name}${player.isHost ? ' · хост' : ''}${player.connected ? '' : ' · байланыс жоқ'}',
@@ -764,19 +893,19 @@ class _HostSeatRow extends StatelessWidget {
           ),
           if (player != null && !player.isHost) ...[
             IconButton(
-              tooltip: 'Алдыңғы түс',
+              tooltip: context.trNullable('Алдыңғы түс'),
               onPressed: seat > 1 ? () => onMove(player.id, seat - 1) : null,
               icon: const Icon(Icons.chevron_left),
             ),
             IconButton(
-              tooltip: 'Келесі түс',
+              tooltip: context.trNullable('Келесі түс'),
               onPressed: seat < maxSeats - 1
                   ? () => onMove(player.id, seat + 1)
                   : null,
               icon: const Icon(Icons.chevron_right),
             ),
             IconButton(
-              tooltip: 'Бөлмеден шығару',
+              tooltip: context.trNullable('Бөлмеден шығару'),
               onPressed: () => onKick(player.id),
               icon: const Icon(Icons.close, color: Color(0xff8d241e)),
             ),
@@ -812,7 +941,7 @@ class _ClientSeatRow extends StatelessWidget {
         width: isMe ? 3 : 1,
       ),
     ),
-    child: Text(
+    child: GameText(
       '${seat + 1} · ${participant?.name ?? 'Бос орын'}${isMe ? ' · сіз' : ''}',
       style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
     ),
@@ -868,7 +997,7 @@ class _LanScaffold extends StatelessWidget {
                       ),
                     ),
                     Expanded(
-                      child: Text(
+                      child: GameText(
                         title,
                         textAlign: TextAlign.center,
                         style: const TextStyle(
@@ -897,9 +1026,9 @@ class _LanPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
     color: DalaTheme.paper,
-    elevation: 7,
-    borderRadius: BorderRadius.circular(18),
-    child: Padding(padding: const EdgeInsets.all(20), child: child),
+    elevation: 1,
+    borderRadius: BorderRadius.circular(4),
+    child: Padding(padding: const EdgeInsets.all(14), child: child),
   );
 }
 
@@ -924,7 +1053,7 @@ class _LanField extends StatelessWidget {
     inputFormatters: inputFormatters,
     maxLength: keyboardType == TextInputType.number ? 6 : 40,
     decoration: InputDecoration(
-      labelText: label,
+      label: GameText(label),
       counterText: '',
       filled: true,
       fillColor: Colors.white70,
@@ -953,13 +1082,13 @@ class _LanActionBand extends StatelessWidget {
     child: InkWell(
       onTap: enabled ? onTap : null,
       child: SizedBox(
-        height: 58,
+        height: 48,
         child: Center(
-          child: Text(
+          child: GameText(
             label,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 21,
+              fontSize: 17,
               fontWeight: FontWeight.w800,
               color: enabled ? Colors.black : Colors.black54,
             ),

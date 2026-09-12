@@ -11,7 +11,7 @@ Future<({String name, Uint8List bytes})?> pickBrowserFile() {
   final complete = Completer<({String name, Uint8List bytes})?>();
   final input = HTMLInputElement()
     ..type = 'file'
-    ..accept = '.dalamod,.dalamap';
+    ..accept = '.dalamod,.zip,.dalamap';
   input.style.display = 'none';
   input.addEventListener(
     'cancel',

@@ -106,6 +106,50 @@ void main() {
     );
   });
   test(
+    'ZIP aliases and a single wrapper folder import as the same mod',
+    () async {
+      final storage = MemoryContentStorage();
+      final library = ContentLibrary(base, storage: storage);
+      addTearDown(library.dispose);
+      final bytes = zip({'My mod/mod.json': manifest(mod)});
+      for (final name in [
+        'sample.dalamod.zip',
+        'SAMPLE.ZIP',
+        'sample.DALAMOD',
+      ]) {
+        await library.importFile(name, bytes);
+        expect(library.errors, isEmpty);
+        expect(library.mods.single.mod.fingerprint, mod.fingerprint);
+        expect(storage.files.keys.single, endsWith('.dalamod'));
+      }
+      await expectLater(
+        library.importFile(
+          'unrelated.zip',
+          zip({
+            'notes.txt': [1, 2],
+          }),
+        ),
+        throwsFormatException,
+      );
+      expect(library.mods, hasLength(1));
+      expect(
+        () => ContentPackage.decode(
+          zip({'one/mod.json': manifest(mod), 'two/mod.json': manifest(mod)}),
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => ContentPackage.decode(
+          zip({
+            'one/mod.json': manifest(mod),
+            'one/../README.md': [1, 2],
+          }),
+        ),
+        throwsFormatException,
+      );
+    },
+  );
+  test(
     'reject broken archive, foreign format, overlarge and future versions',
     () {
       expect(
@@ -255,7 +299,7 @@ void main() {
       expect(await Directory('${root.path}/mods').exists(), isTrue);
       expect(await Directory('${root.path}/maps').exists(), isTrue);
       await storage.write(
-        'mods/test.dalamod',
+        'mods/test.DALAMOD.ZIP',
         ContentPackage(mod: mod).encode(),
       );
       final library = ContentLibrary(base, storage: storage);
@@ -265,7 +309,7 @@ void main() {
         storage.write('../escape.dalamod', Uint8List(0)),
         throwsFormatException,
       );
-      await library.remove('mods/test.dalamod');
+      await library.remove('mods/test.DALAMOD.ZIP');
       expect(library.mods, isEmpty);
       library.dispose();
     },

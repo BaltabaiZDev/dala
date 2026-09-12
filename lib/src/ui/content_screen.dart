@@ -1,3 +1,4 @@
+import '../l10n/game_locale.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../modding/content_files.dart';
@@ -17,6 +18,8 @@ class ContentScreen extends StatefulWidget {
 
 class _ContentScreenState extends State<ContentScreen> {
   bool _busy = false;
+  bool _maps = false;
+
   Future<void> _run(Future<void> Function() action) async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -35,6 +38,7 @@ class _ContentScreenState extends State<ContentScreen> {
     await widget.library.importFile(file.name, file.bytes);
     if (mounted) showTopSnackBar(context, 'Пакет кітапханаға қосылды');
   });
+
   Future<void> _template() => _run(() async {
     final raw = widget.library.defaultMod.toJson()
       ..['id'] = 'my_dala_mod'
@@ -48,246 +52,445 @@ class _ContentScreenState extends State<ContentScreen> {
       ContentPackage(mod: GameMod.fromJson(raw)).encode(),
     );
   });
+
   @override
-  Widget build(BuildContext context) => DefaultTabController(
-    length: 2,
-    child: Scaffold(
-      backgroundColor: DalaTheme.canvas,
-      appBar: AppBar(
-        title: const Text('Модтар мен карталар'),
-        bottom: const TabBar(
-          tabs: [
-            Tab(text: 'Модтар'),
-            Tab(text: 'Карталар'),
-          ],
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: DalaTheme.canvas,
+    body: SafeArea(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680),
+          child: AnimatedBuilder(
+            animation: widget.library,
+            builder: (context, _) {
+              final library = widget.library;
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        IconButton(
+                          tooltip: context.trNullable('Артқа'),
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.arrow_back_rounded),
+                        ),
+                        const Expanded(
+                          child: GameText(
+                            'Модтар мен карталар',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        const Icon(
+                          Icons.flag_outlined,
+                          color: DalaTheme.deepWater,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _tab('Модтар', library.mods.length, false),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _tab('Карталар', library.maps.length, true),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 4,
+                      children: [
+                        _tool('Импорт', Icons.file_open_outlined, _import),
+                        _tool(
+                          'Қайта оқу',
+                          Icons.refresh,
+                          () => _run(library.refresh),
+                        ),
+                        if (!_maps)
+                          _tool(
+                            'Мод үлгісі',
+                            Icons.inventory_2_outlined,
+                            _template,
+                          ),
+                      ],
+                    ),
+                    if (_busy) const LinearProgressIndicator(minHeight: 2),
+                    if (library.errors.isNotEmpty)
+                      GameText(
+                        library.errors.join('\n'),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: DalaTheme.rose,
+                          fontSize: 12,
+                        ),
+                      ),
+                    Expanded(
+                      child: _maps ? _mapList(library) : _modList(library),
+                    ),
+                    if (library.location.isNotEmpty ||
+                        library.storage is ContentFolderPicker)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (library.location.isNotEmpty)
+                            _tool(
+                              'mods / maps',
+                              Icons.folder_outlined,
+                              () async {
+                                await Clipboard.setData(
+                                  ClipboardData(text: library.location),
+                                );
+                                if (context.mounted) {
+                                  showTopSnackBar(
+                                    context,
+                                    'Қалта жолы көшірілді',
+                                  );
+                                }
+                              },
+                            ),
+                          if (library.storage is ContentFolderPicker &&
+                              (library.storage as ContentFolderPicker)
+                                  .canChooseFolder)
+                            Flexible(
+                              child: _tool(
+                                'Қалтаны таңдау',
+                                Icons.drive_file_move_outlined,
+                                () => _run(() async {
+                                  if (await (library.storage
+                                          as ContentFolderPicker)
+                                      .chooseFolder()) {
+                                    await library.refresh();
+                                  }
+                                }),
+                              ),
+                            ),
+                        ],
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
-      body: AnimatedBuilder(
-        animation: widget.library,
-        builder: (context, _) {
-          final library = widget.library;
-          return Column(
-            children: [
+    ),
+  );
+
+  Widget _tab(String label, int count, bool maps) => TextButton(
+    style: TextButton.styleFrom(
+      foregroundColor: DalaTheme.ink,
+      backgroundColor: _maps == maps ? DalaTheme.gold : DalaTheme.paper,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+    ),
+    onPressed: () => setState(() => _maps = maps),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        GameText(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+        const SizedBox(width: 8),
+        GameText('$count', style: const TextStyle(fontSize: 12)),
+      ],
+    ),
+  );
+
+  Widget _tool(String label, IconData icon, VoidCallback onTap) =>
+      TextButton.icon(
+        style: TextButton.styleFrom(
+          foregroundColor: DalaTheme.deepWater,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          textStyle: const TextStyle(fontFamily: 'Dala Sans', fontSize: 12),
+        ),
+        onPressed: _busy ? null : onTap,
+        icon: Icon(icon, size: 16),
+        label: GameText(label),
+      );
+
+  Widget _modList(ContentLibrary library) {
+    final active = library.activeHashes;
+    final ordered = [
+      ...library.activeMods,
+      ...library.mods.where((entry) => !active.contains(entry.hash)),
+    ];
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: GameText(
+                active.isEmpty
+                    ? 'Модтар өшірулі'
+                    : 'Қосулы модтар: ${active.length}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: _busy
+                  ? null
+                  : () => _run(() => library.activate(null)),
+              child: const GameText(
+                'Кәдімгі DALA',
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+        if (active.length > 1)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 10),
+            child: GameText(
+              'Реті жоғарыдан төмен. Бірдей баптауды төмендегі мод өзгертеді.',
+              style: TextStyle(fontSize: 11, color: DalaTheme.deepWater),
+            ),
+          ),
+        if (library.conflicts.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: GameText(
+              'Қайталанған баптаулар: ${library.conflicts.length}. Соңғы мод басым.',
+              style: const TextStyle(fontSize: 12, color: DalaTheme.deepWater),
+            ),
+          ),
+        for (final entry in ordered) _modRow(entry, active.indexOf(entry.hash)),
+        if (ordered.isEmpty)
+          const _EmptyContent(
+            icon: Icons.inventory_2_outlined,
+            title: 'Өз далаңды жаса',
+            help: '.dalamod не .zip импорттаңыз немесе мод үлгісін алыңыз.',
+          ),
+      ],
+    );
+  }
+
+  Widget _modRow(InstalledMod entry, int rank) => _entry(
+    active: rank >= 0,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            if (rank >= 0)
               Padding(
-                padding: const EdgeInsets.all(12),
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    FilledButton.icon(
-                      onPressed: _busy ? null : _import,
-                      icon: const Icon(Icons.file_open_outlined),
-                      label: const Text('Импорт'),
-                    ),
-                    if (library.storage is ContentFolderPicker &&
-                        (library.storage as ContentFolderPicker)
-                            .canChooseFolder)
-                      OutlinedButton.icon(
-                        onPressed: _busy
-                            ? null
-                            : () => _run(() async {
-                                if (await (library.storage
-                                        as ContentFolderPicker)
-                                    .chooseFolder()) {
-                                  await library.refresh();
-                                }
-                              }),
-                        icon: const Icon(Icons.folder_open),
-                        label: const Text('Қалтаны таңдау'),
-                      ),
-                    OutlinedButton.icon(
-                      onPressed: _busy ? null : () => _run(library.refresh),
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Қайта оқу'),
-                    ),
-                    OutlinedButton(
-                      onPressed: _busy ? null : _template,
-                      child: const Text('Мод үлгісі'),
-                    ),
-                  ],
+                padding: const EdgeInsets.only(right: 10),
+                child: GameText(
+                  '${rank + 1}',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),
-              if (_busy) const LinearProgressIndicator(),
-              if (library.errors.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    library.errors.join('\n'),
-                    maxLines: 4,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GameText(
+                    entry.mod.name,
+                    translate: false,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: DalaTheme.rose),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
-              Expanded(
-                child: TabBarView(
-                  children: [
-                    ListView(
-                      padding: const EdgeInsets.all(12),
-                      children: [
-                        Card(
-                          child: ListTile(
-                            title: const Text('Кәдімгі DALA'),
-                            subtitle: const Text(
-                              'Жаңа ойынға қолданылатын ережелер',
-                            ),
-                            trailing: Icon(
-                              library.activeHash == null
-                                  ? Icons.check_circle
-                                  : Icons.radio_button_unchecked,
-                            ),
-                            onTap: _busy
-                                ? null
-                                : () => _run(() => library.activate(null)),
-                          ),
-                        ),
-                        for (final entry in library.mods)
-                          Card(
-                            child: Column(
-                              children: [
-                                ListTile(
-                                  title: Text(entry.mod.name),
-                                  subtitle: Text(
-                                    'v${entry.mod.version}${entry.mod.author.isEmpty ? '' : ' · ${entry.mod.author}'}\n${entry.mod.description}',
-                                  ),
-                                  trailing: Switch(
-                                    value: entry.hash == library.activeHash,
-                                    onChanged: _busy
-                                        ? null
-                                        : (on) => _run(
-                                            () => library.activate(
-                                              on ? entry.hash : null,
-                                            ),
-                                          ),
-                                  ),
-                                ),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    TextButton(
-                                      onPressed: _busy
-                                          ? null
-                                          : () => _run(() async {
-                                              await ContentFiles.save(
-                                                '${entry.mod.id}.dalamod',
-                                                entry.package.encode(),
-                                              );
-                                            }),
-                                      child: const Text('Экспорт'),
-                                    ),
-                                    TextButton(
-                                      onPressed: _busy
-                                          ? null
-                                          : () => _run(
-                                              () => library.remove(entry.path),
-                                            ),
-                                      child: const Text('Өшіру'),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        if (library.mods.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.all(20),
-                            child: Text(
-                              'Мод үлгісін экспорттап, mod.json ережелерін өзгертіңіз. ZIP архивін .dalamod деп атаңыз да mods қалтасына салыңыз немесе импорттаңыз.',
-                            ),
-                          ),
-                        const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Text(
-                            'Бір ереже моды қосылады. Жаңа шайқас оны автоматты қолданады. Бұрынғы сақтаулар өз ережесін сақтайды.',
-                          ),
-                        ),
-                      ],
+                  GameText(
+                    'v${entry.mod.version}${entry.mod.author.isEmpty ? '' : ' · ${entry.mod.author}'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: rank >= 0,
+              onChanged: _busy
+                  ? null
+                  : (enabled) => _run(
+                      () => widget.library.setEnabled(entry.hash, enabled),
                     ),
-                    ListView(
-                      padding: const EdgeInsets.all(12),
-                      children: [
-                        if (library.maps.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.all(20),
-                            child: Text(
-                              'Редакторда карта жасап, «Кітапханаға сақтау» басыңыз. .dalamap файлын maps қалтасына салуға немесе импорттауға болады.',
-                            ),
-                          ),
-                        for (final entry in library.maps)
-                          Card(
-                            child: Column(
-                              children: [
-                                ListTile(
-                                  leading: const Icon(Icons.map_outlined),
-                                  title: Text(entry.map.name),
-                                  subtitle: Text(
-                                    library.modForMap(entry)?.name ??
-                                        'Керек мод: ${entry.map.modId}',
-                                  ),
-                                ),
-                                Wrap(
-                                  spacing: 8,
-                                  children: [
-                                    FilledButton(
-                                      onPressed:
-                                          _busy ||
-                                              library.modForMap(entry) == null
-                                          ? null
-                                          : () => Navigator.pop(context, entry),
-                                      child: const Text('Ойнау'),
-                                    ),
-                                    TextButton(
-                                      onPressed: _busy
-                                          ? null
-                                          : () => _run(() async {
-                                              await ContentFiles.save(
-                                                'dala-map.dalamap',
-                                                entry.map.encode(),
-                                              );
-                                            }),
-                                      child: const Text('Экспорт'),
-                                    ),
-                                    if (entry.packageHash == null)
-                                      TextButton(
-                                        onPressed: _busy
-                                            ? null
-                                            : () => _run(
-                                                () =>
-                                                    library.remove(entry.path),
-                                              ),
-                                        child: const Text('Өшіру'),
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
+            ),
+          ],
+        ),
+        if (entry.mod.description.isNotEmpty)
+          GameText(
+            entry.mod.description,
+            translate: false,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 11),
+          ),
+        Row(
+          children: [
+            if (rank >= 0) ...[
+              IconButton(
+                tooltip: context.trNullable('Жоғары'),
+                iconSize: 18,
+                onPressed: _busy || rank == 0
+                    ? null
+                    : () => _run(() => widget.library.moveMod(entry.hash, -1)),
+                icon: const Icon(Icons.arrow_upward),
+              ),
+              IconButton(
+                tooltip: context.trNullable('Төмен'),
+                iconSize: 18,
+                onPressed:
+                    _busy || rank == widget.library.activeHashes.length - 1
+                    ? null
+                    : () => _run(() => widget.library.moveMod(entry.hash, 1)),
+                icon: const Icon(Icons.arrow_downward),
+              ),
+            ],
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: _tool(
+                  'Экспорт',
+                  Icons.ios_share,
+                  () => _run(() async {
+                    await ContentFiles.save(
+                      '${entry.mod.id}.dalamod',
+                      entry.package.encode(),
+                    );
+                  }),
                 ),
               ),
-              if (library.location.isNotEmpty)
-                SafeArea(
-                  top: false,
-                  child: ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.folder_outlined),
-                    title: Text(
-                      library.location,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: const Text('mods / maps · жолды көшіру'),
-                    onTap: () => Clipboard.setData(
-                      ClipboardData(text: library.location),
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
+            ),
+            IconButton(
+              tooltip: context.trNullable('Өшіру'),
+              iconSize: 18,
+              onPressed: _busy
+                  ? null
+                  : () => _run(() => widget.library.remove(entry.path)),
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+  Widget _mapList(ContentLibrary library) => ListView(
+    padding: const EdgeInsets.symmetric(vertical: 12),
+    children: [
+      if (library.maps.isEmpty)
+        const _EmptyContent(
+          icon: Icons.map_outlined,
+          title: 'Жаңа жорық',
+          help: 'Редакторда карта сақтаңыз немесе .dalamap файлын импорттаңыз.',
+        ),
+      for (final entry in library.maps)
+        _mapRow(entry, library.modForMap(entry)),
+    ],
+  );
+
+  Widget _mapRow(InstalledMap entry, GameMod? mod) => _entry(
+    active: false,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GameText(
+          entry.map.name,
+          translate: false,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+        ),
+        GameText(
+          mod?.name ?? 'Картаға қажет модтарды орнатыңыз.',
+          translate: mod == null,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 11),
+        ),
+        Row(
+          children: [
+            TextButton.icon(
+              onPressed: _busy || mod == null
+                  ? null
+                  : () => Navigator.pop(context, entry),
+              icon: Icon(
+                mod == null ? Icons.lock_outline : Icons.play_arrow,
+                size: 18,
+              ),
+              label: const GameText('Ойнау'),
+            ),
+            const Spacer(),
+            _tool(
+              'Экспорт',
+              Icons.ios_share,
+              () => _run(() async {
+                await ContentFiles.save('dala-map.dalamap', entry.map.encode());
+              }),
+            ),
+            if (entry.packageHash == null)
+              IconButton(
+                tooltip: context.trNullable('Өшіру'),
+                iconSize: 18,
+                onPressed: _busy
+                    ? null
+                    : () => _run(() => widget.library.remove(entry.path)),
+                icon: const Icon(Icons.delete_outline),
+              ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+  Widget _entry({required bool active, required Widget child}) => Container(
+    margin: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.fromLTRB(12, 8, 8, 0),
+    decoration: BoxDecoration(
+      color: DalaTheme.paper,
+      border: Border(
+        left: BorderSide(
+          width: 4,
+          color: active ? DalaTheme.green : DalaTheme.gold,
+        ),
       ),
+    ),
+    child: child,
+  );
+}
+
+class _EmptyContent extends StatelessWidget {
+  const _EmptyContent({
+    required this.icon,
+    required this.title,
+    required this.help,
+  });
+  final IconData icon;
+  final String title;
+  final String help;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+    child: Column(
+      children: [
+        Icon(icon, size: 44, color: DalaTheme.deepWater),
+        const SizedBox(height: 14),
+        GameText(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+        ),
+        const SizedBox(height: 8),
+        GameText(
+          help,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 13, height: 1.5),
+        ),
+      ],
     ),
   );
 }

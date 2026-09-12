@@ -22,6 +22,15 @@ class OrganicCells {
   static final _edgePaths = <(int, int, int), Path>{};
   static final _centers = <(int, int), Offset>{};
   static final _centerCoordinates = <Offset, (int, int)>{};
+  static void clearCache() {
+    _paths.clear();
+    _boundaries.clear();
+    _edges.clear();
+    _edgePaths.clear();
+    _centers.clear();
+    _centerCoordinates.clear();
+  }
+
   // A giant board has 5,041 cells. Bound retained geometry across editor/map
   // changes and off-board pointer input without evicting a normal whole map.
   static T _cached<K, T>(

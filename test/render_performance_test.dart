@@ -5,11 +5,62 @@ import 'package:antiyoy_self/src/game/models.dart';
 import 'package:antiyoy_self/src/modding/game_mod.dart';
 import 'package:antiyoy_self/src/ui/classic_assets.dart';
 import 'package:antiyoy_self/src/ui/hex_board.dart';
+import 'package:antiyoy_self/src/ui/map_raster_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'large-map action mask fallback preserves visible land and sea pixels',
+    () async {
+      final mod = await GameMod.loadDefault();
+      final state = MapGenerator(mod).generate(
+        const GameConfig(
+          mapSize: MapSize.large,
+          playerCount: 5,
+          humanCount: 5,
+          seed: 823,
+        ),
+      );
+      expect(state.hexes.length, greaterThanOrEqualTo(1200));
+      final cache = MapRasterCache(schedule: (_) {});
+      addTearDown(cache.dispose);
+      final coast = state.hexes.firstWhere(
+        (t) => t.active && t.neighbors.any((n) => !state.hexes[n].active),
+      );
+      final view = Rect.fromCenter(
+        center: HexBoard.centerOf(coast),
+        width: 256,
+        height: 256,
+      );
+      cache.setViewport(view, 1);
+      Future<List<int>> pixels(bool cached) async {
+        final recorder = ui.PictureRecorder();
+        final canvas = Canvas(recorder)..translate(-view.left, -view.top);
+        HexActionMaskPainter(
+          cache: cached ? cache : null,
+          signature: 1,
+          state: state,
+          targets: {coast.index},
+          waterTargets: const {},
+          selected: coast.index,
+          selectedWater: null,
+        ).paint(canvas, HexBoard.canvasSize(state));
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(256, 256);
+        final bytes = (await image.toByteData())!.buffer.asUint8List().toList();
+        image.dispose();
+        picture.dispose();
+        return bytes;
+      }
+
+      final reference = await pixels(false);
+      expect(reference.any((value) => value != 0), isTrue);
+      expect(await pixels(true), reference);
+    },
+  );
 
   test('pre-tinted team masks preserve direct color-filter pixels', () async {
     const color = Color(0xff5baa77);

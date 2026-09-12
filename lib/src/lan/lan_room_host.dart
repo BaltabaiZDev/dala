@@ -41,6 +41,8 @@ class LanRoomHost extends ChangeNotifier {
 
   final GameConfig config;
   final GameMod? mod;
+  GameMod? _defaultMod;
+  GameMod? get _roomMod => mod ?? _defaultMod;
   final String? mapName;
   String? _modHash;
   final String roomCode;
@@ -80,12 +82,13 @@ class LanRoomHost extends ChangeNotifier {
     started: started,
     turnTimerEnabled: turnTimerEnabled,
     turnDurationSeconds: turnDurationSeconds,
-    modName: (controller?.mod ?? mod)?.name ?? 'DALA',
-    modHash: _modHash ??= (controller?.mod ?? mod)?.fingerprint,
+    modName: (controller?.mod ?? _roomMod)?.name ?? 'DALA',
+    modHash: _modHash ??= (controller?.mod ?? _roomMod)?.fingerprint,
     modded:
-        (controller?.mod ?? mod)?.id != null &&
-        (controller?.mod ?? mod)?.id != 'classic_steppe',
+        (controller?.mod ?? _roomMod)?.id != null &&
+        (controller?.mod ?? _roomMod)?.id != 'classic_steppe',
     mapName: mapName,
+    requiredMods: _roomMod?.requirements ?? const [],
   );
 
   bool get readyToStart => !started && lobby.readyToStart;
@@ -124,6 +127,7 @@ class LanRoomHost extends ChangeNotifier {
   Future<void> start({int port = lanDefaultPort}) async {
     if (_closed) throw StateError('LAN бөлмесі жабылған.');
     try {
+      _defaultMod ??= await GameMod.loadDefault();
       binding = await _backend.start(port: port);
       _connectionSubscription = _backend.connections.listen(_acceptConnection);
       error = null;
@@ -248,6 +252,23 @@ class LanRoomHost extends ChangeNotifier {
       _sendError(connection, 'Бөлме коды қате.');
       return;
     }
+    final hashes = message['installedModHashes'];
+    final available = hashes is List && hashes.length <= 128
+        ? hashes.whereType<String>().toSet()
+        : <String>{};
+    final missing = lobby.requiredMods
+        .where((m) => !available.contains(m.hash))
+        .toList();
+    if (missing.isNotEmpty || message['baseHash'] != _defaultMod?.fingerprint) {
+      connection.send({
+        'type': 'contentMismatch',
+        'message': missing.isNotEmpty
+            ? 'Бөлмеге кіру үшін бірдей модтар орнатылуы керек: ${missing.map((m) => '${m.name} v${m.version}').join(', ')}'
+            : 'Негізгі ойын нұсқасы сәйкес емес. Ойынды жаңартыңыз.',
+        'requiredMods': lobby.requiredMods.map((m) => m.toJson()).toList(),
+      });
+      return;
+    }
     final requestedToken = message['token'] as String?;
     if (requestedToken != null) {
       final existingId = _tokenParticipantIds[requestedToken];
@@ -313,7 +334,8 @@ class LanRoomHost extends ChangeNotifier {
       'seat': participant.seat,
       'revision': revision,
       'lobby': lobby.toJson(),
-      if (started && controller != null) 'state': controller!.state.toJson(),
+      if (started && controller != null)
+        'state': _networkState(controller!.state),
       if (started && controller != null) 'turnClock': _turnClockJson(),
     });
     _broadcastLobby();
@@ -434,7 +456,7 @@ class LanRoomHost extends ChangeNotifier {
       'type': 'gameStarted',
       'revision': revision,
       'lobby': lobby.toJson(),
-      'state': gameController.state.toJson(),
+      'state': _networkState(gameController.state),
       'turnClock': _turnClockJson(),
     });
     notifyListeners();
@@ -456,7 +478,7 @@ class LanRoomHost extends ChangeNotifier {
       'type': 'gameStarted',
       'revision': revision,
       'lobby': lobby.toJson(),
-      'state': gameController.state.toJson(),
+      'state': _networkState(gameController.state),
       'turnClock': _turnClockJson(),
     });
     notifyListeners();
@@ -470,12 +492,16 @@ class LanRoomHost extends ChangeNotifier {
 
   void _pinMod(GameController controller) {
     if (controller.state.modId != controller.mod.id ||
-        (mod != null && controller.mod.fingerprint != mod!.fingerprint)) {
+        (_roomMod != null &&
+            controller.mod.fingerprint != _roomMod!.fingerprint)) {
       throw StateError('Бөлме моды мен ойын ережелері сәйкес емес.');
     }
     controller.state.modSnapshot = controller.mod.toJson();
     _modHash = controller.mod.fingerprint;
   }
+
+  Map<String, dynamic> _networkState(GameState state) =>
+      state.toJson()..remove('modSnapshot');
 
   void detachGameController(GameController gameController) {
     if (!identical(controller, gameController)) return;
@@ -503,7 +529,7 @@ class LanRoomHost extends ChangeNotifier {
       _broadcast({
         'type': 'snapshot',
         'revision': revision,
-        'state': gameController.state.toJson(),
+        'state': _networkState(gameController.state),
         'turnClock': _turnClockJson(),
       });
     } else {
@@ -567,7 +593,7 @@ class LanRoomHost extends ChangeNotifier {
     connection.send({
       'type': 'snapshot',
       'revision': revision,
-      'state': controller!.state.toJson(),
+      'state': _networkState(controller!.state),
       'turnClock': _turnClockJson(),
     });
   }

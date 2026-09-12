@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../game/game_controller.dart';
 import '../game/game_engine.dart';
@@ -179,9 +180,7 @@ class HexBoard extends StatefulWidget {
     return Offset(dx / cell.tiles.length, dy / cell.tiles.length);
   }
 
-  /// Every map object that belongs to [player] and should be kept in view when
-  /// a human turn starts. Land from separate provinces and naval objects are
-  /// deliberately combined instead of choosing only the largest province.
+  /// All owned land and naval objects, also covering displaced players.
   @visibleForTesting
   static List<Offset> playerAssetCenters(GameState state, int player) => [
     for (final tile in state.hexes)
@@ -191,11 +190,55 @@ class HexBoard extends StatefulWidget {
         centerOfWater(state, cell),
   ];
 
+  /// Start at a playable province, not the empty midpoint between distant
+  /// islands or a ship on the other side of the world.
+  static List<Offset> playerFocusCenters(
+    GameState state,
+    int player, {
+    int? selectedTile,
+    int? selectedWaterCell,
+  }) {
+    if (selectedWaterCell != null &&
+        selectedWaterCell >= 0 &&
+        selectedWaterCell < state.waterCells.length) {
+      final cell = state.waterCells[selectedWaterCell];
+      if (cell.boat?.owner == player || cell.seaFort?.owner == player) {
+        return [centerOfWater(state, cell)];
+      }
+    }
+    Province? home;
+    for (final province in state.provinces) {
+      if (province.owner != player || province.tiles.isEmpty) continue;
+      if (selectedTile != null && province.tiles.contains(selectedTile)) {
+        home = province;
+        break;
+      }
+      if (home == null ||
+          province.tiles.length > home.tiles.length ||
+          (province.tiles.length == home.tiles.length &&
+              province.capital < home.capital)) {
+        home = province;
+      }
+    }
+    if (home != null) {
+      return [for (final index in home.tiles) centerOf(state.hexes[index])];
+    }
+    // A displaced player may have isolated land or only a fleet left.
+    final assets = playerAssetCenters(state, player);
+    return assets.isEmpty ? [] : [assets.first];
+  }
+
   @override
   State<HexBoard> createState() => _HexBoardState();
 }
 
-class _HexBoardState extends State<HexBoard> with TickerProviderStateMixin {
+bool get _mobileRasterBudget =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS);
+
+class _HexBoardState extends State<HexBoard>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   final TransformationController _transformation = TransformationController();
   late final AnimationController _jumpAnimation;
   late final AnimationController _cameraAnimation;
@@ -205,7 +248,7 @@ class _HexBoardState extends State<HexBoard> with TickerProviderStateMixin {
   ClassicSprites? _sprites;
   Size? _initialViewport;
   int? _focusedTurn;
-  final Map<int, double> _humanPlayerScales = {};
+  final Map<int, Matrix4> _humanPlayerViews = {};
   int? _playedBattleSerial;
   int? _playedFortDestructionSerial;
   int? _playedArtillerySerial;
@@ -222,7 +265,9 @@ class _HexBoardState extends State<HexBoard> with TickerProviderStateMixin {
   GameState? _pieceFrameState;
   final HexTerrainCache _terrainCache = HexTerrainCache();
   final MapRasterCache _maskCache = MapRasterCache(
-    maxDetailBytes: 12 * 1024 * 1024,
+    maxDetailBytes: (_mobileRasterBudget ? 4 : 12) * 1024 * 1024,
+    tileSize: _mobileRasterBudget ? 256 : 512,
+    overviewExtent: _mobileRasterBudget ? 1024 : 1536,
     backgroundColor: Colors.transparent,
   );
   Size _rasterViewport = Size.zero;
@@ -233,6 +278,7 @@ class _HexBoardState extends State<HexBoard> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _jumpAnimation = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 520),
@@ -277,6 +323,7 @@ class _HexBoardState extends State<HexBoard> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _terrainCache.dispose();
     _maskCache.dispose();
     _sprites?.dispose();
@@ -287,6 +334,13 @@ class _HexBoardState extends State<HexBoard> with TickerProviderStateMixin {
     _transformation.removeListener(_handleTransformChanged);
     _transformation.dispose();
     super.dispose();
+  }
+
+  @override
+  void didHaveMemoryPressure() {
+    _terrainCache.trimMemory();
+    _maskCache.trimMemory();
+    OrganicCells.clearCache();
   }
 
   @override
@@ -388,7 +442,12 @@ class _HexBoardState extends State<HexBoard> with TickerProviderStateMixin {
             (_overviewAnimationsSuppressed || _systemAnimationsDisabled)) {
           _scheduleAnimationDetailSync();
         }
-        final focusPlayer = widget.controller.localPlayer ?? state.turn;
+        final focusPlayer =
+            widget.controller.localPlayer ??
+            (state.isHuman(state.turn)
+                ? state.turn
+                : _focusedTurn ??
+                      (state.config.humanCount > 0 ? 0 : state.turn));
         final turnChanged = _focusedTurn != focusPlayer;
         final viewportChanged = _initialViewport != viewport;
         if (!widget.controller.artilleryCinematicActive &&
@@ -397,24 +456,22 @@ class _HexBoardState extends State<HexBoard> with TickerProviderStateMixin {
           if (turnChanged &&
               previousTurn != null &&
               state.isHuman(previousTurn)) {
-            _humanPlayerScales[previousTurn] = _twoDimensionalScale(
-              _transformation.value,
-            ).clamp(minimumScale, 2.6);
+            _humanPlayerViews[previousTurn] = _transformation.value.clone();
           }
           _focusedTurn = focusPlayer;
           _initialViewport = viewport;
           // AI turns are simulated without dragging the shared camera across
-          // the board. Human players each keep their own preferred zoom.
+          // the board. Human players each keep their own zoom and position.
           if (state.isHuman(focusPlayer)) {
             final player = focusPlayer;
-            final savedScale = _humanPlayerScales[player];
+            final savedView = _humanPlayerViews[player];
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
+              if (mounted && _focusedTurn == player) {
                 _focusPlayer(
                   viewport,
                   player: player,
                   animate: previousTurn != null,
-                  preferredScale: savedScale,
+                  savedView: savedView,
                 );
               }
             });
@@ -764,12 +821,17 @@ class _HexBoardState extends State<HexBoard> with TickerProviderStateMixin {
     Size viewport, {
     required int player,
     required bool animate,
-    double? preferredScale,
+    Matrix4? savedView,
   }) {
     final state = widget.controller.viewState;
     final minimumScale = HexBoard.minimumScaleFor(viewport, state);
     final boardSize = HexBoard.canvasSize(state);
-    final centers = HexBoard.playerAssetCenters(state, player);
+    final centers = HexBoard.playerFocusCenters(
+      state,
+      player,
+      selectedTile: widget.controller.selectedTile,
+      selectedWaterCell: widget.controller.selectedWaterCell,
+    );
     if (centers.isEmpty) return;
     final minX = centers.map((point) => point.dx).reduce(math.min);
     final maxX = centers.map((point) => point.dx).reduce(math.max);
@@ -783,14 +845,16 @@ class _HexBoardState extends State<HexBoard> with TickerProviderStateMixin {
           viewport.width * (slay ? .9 : .78) / empireWidth,
           viewport.height * (slay ? .74 : .66) / empireHeight,
         )
-        .clamp(.3, slay ? 1.35 : 1.15);
-    final scale = (preferredScale ?? fittedScale).clamp(minimumScale, 2.6);
+        .clamp(minimumScale, slay ? 1.35 : 1.15);
+    final scale = fittedScale;
     final target = Offset((minX + maxX) / 2, (minY + maxY) / 2);
     final dx = viewport.width / 2 - target.dx * scale;
     final dy = viewport.height * .46 - target.dy * scale;
     final next = HexBoard.constrainTransform(
-      transform: Matrix4.diagonal3Values(scale, scale, 1)
-        ..setTranslationRaw(dx, dy, 0),
+      transform:
+          savedView ??
+          (Matrix4.diagonal3Values(scale, scale, 1)
+            ..setTranslationRaw(dx, dy, 0)),
       viewport: viewport,
       canvas: boardSize,
       minScale: minimumScale,
@@ -1093,6 +1157,9 @@ class HexActionMaskPainter extends CustomPainter {
         signature!,
         _paintMask,
         size: size,
+        recordOverview: _paintMask,
+        recordRegion: (canvas, bounds) =>
+            _paintMask(canvas, bounds: bounds.inflate(HexBoard.hexRadius + 2)),
         rasterize:
             state.hexes.length >= 1200 &&
             !const bool.fromEnvironment('ANTIYOY_VECTOR_TERRAIN'),
@@ -1102,10 +1169,11 @@ class HexActionMaskPainter extends CustomPainter {
     }
   }
 
-  void _paintMask(Canvas canvas) {
+  void _paintMask(Canvas canvas, {Rect? bounds}) {
     final shadow = Paint()..color = const Color(0x66000000);
     for (final tile in state.hexes) {
       if (!tile.active ||
+          (bounds != null && !bounds.contains(HexBoard.centerOf(tile))) ||
           tile.index == selected ||
           targets.contains(tile.index)) {
         continue;
@@ -1120,6 +1188,10 @@ class HexActionMaskPainter extends CustomPainter {
         continue;
       }
       for (final tileIndex in cell.tiles) {
+        if (bounds != null &&
+            !bounds.contains(HexBoard.centerOf(state.hexes[tileIndex]))) {
+          continue;
+        }
         canvas.drawPath(
           _hexPath(
             HexBoard.centerOf(state.hexes[tileIndex]),
@@ -1142,7 +1214,12 @@ class HexActionMaskPainter extends CustomPainter {
 }
 
 class HexTerrainCache extends MapRasterCache {
-  HexTerrainCache({super.rasterizer, super.schedule});
+  HexTerrainCache({super.rasterizer, super.schedule})
+    : super(
+        maxDetailBytes: (_mobileRasterBudget ? 20 : 48) * 1024 * 1024,
+        tileSize: _mobileRasterBudget ? 256 : 512,
+        overviewExtent: _mobileRasterBudget ? 1024 : 1536,
+      );
   List<int> _cells = [];
   int? _environment;
 

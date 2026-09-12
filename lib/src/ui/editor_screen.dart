@@ -1,3 +1,4 @@
+import '../l10n/game_locale.dart';
 import 'dala_theme.dart';
 import 'organic_cells.dart';
 import 'dart:async';
@@ -488,7 +489,7 @@ class _EditorScreenState extends State<EditorScreen> {
             children: [
               const Padding(
                 padding: EdgeInsets.fromLTRB(18, 18, 18, 14),
-                child: Text(
+                child: GameText(
                   'Редактордан шығу?',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 20, color: Colors.black),
@@ -538,7 +539,7 @@ class _EditorScreenState extends State<EditorScreen> {
     final name = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Карта атауы'),
+        title: const GameText('Карта атауы'),
         content: TextFormField(
           initialValue: enteredName,
           onChanged: (value) => enteredName = value,
@@ -548,11 +549,11 @@ class _EditorScreenState extends State<EditorScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Бас тарту'),
+            child: const GameText('Бас тарту'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, enteredName),
-            child: const Text('Сақтау'),
+            child: const GameText('Сақтау'),
           ),
         ],
       ),
@@ -859,14 +860,14 @@ class _EditorHeader extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              const GameText(
                 'Редактор',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 24, height: 1),
               ),
               const SizedBox(height: 4),
-              Text(
+              GameText(
                 status,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -896,41 +897,41 @@ class _EditorHeader extends StatelessWidget {
           itemBuilder: (_) => const [
             PopupMenuItem(
               value: _EditorMenuAction.save,
-              child: Text('Жобаны сақтау'),
+              child: GameText('Жобаны сақтау'),
             ),
             PopupMenuItem(
               value: _EditorMenuAction.load,
-              child: Text('Жобаны жүктеу'),
+              child: GameText('Жобаны жүктеу'),
             ),
             PopupMenuDivider(),
             PopupMenuItem(
               value: _EditorMenuAction.saveMap,
-              child: Text('Кітапханаға сақтау'),
+              child: GameText('Кітапханаға сақтау'),
             ),
             PopupMenuItem(
               value: _EditorMenuAction.exportFile,
-              child: Text('.dalamap экспорттау'),
+              child: GameText('.dalamap экспорттау'),
             ),
             PopupMenuItem(
               value: _EditorMenuAction.importFile,
-              child: Text('Карта файлын импорттау'),
+              child: GameText('Карта файлын импорттау'),
             ),
             PopupMenuItem(
               value: _EditorMenuAction.export,
-              child: Text('Картаны экспорттау'),
+              child: GameText('Картаны экспорттау'),
             ),
             PopupMenuItem(
               value: _EditorMenuAction.import,
-              child: Text('Картаны импорттау'),
+              child: GameText('Картаны импорттау'),
             ),
             PopupMenuDivider(),
             PopupMenuItem(
               value: _EditorMenuAction.regenerate,
-              child: Text('Картаны қайта жасау'),
+              child: GameText('Картаны қайта жасау'),
             ),
             PopupMenuItem(
               value: _EditorMenuAction.blank,
-              child: Text('Бос жер картасы'),
+              child: GameText('Бос жер картасы'),
             ),
           ],
           child: const _EditorButtonSurface(
@@ -970,7 +971,7 @@ class _EditorLeaveChoice extends StatelessWidget {
         width: double.infinity,
         height: 58,
         child: Center(
-          child: Text(
+          child: GameText(
             label,
             maxLines: 1,
             style: const TextStyle(fontSize: 22, color: Colors.black),
@@ -997,7 +998,7 @@ class _EditorHeaderButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Tooltip(
-    message: tooltip,
+    message: context.trNullable(tooltip),
     child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -1122,7 +1123,7 @@ class _EditorToolbar extends StatelessWidget {
             height: 42,
             child: switch (tool) {
               _EditorTool.terrain => const Center(
-                child: Text(
+                child: GameText(
                   'Ұяшықты басыңыз: жер ↔ су',
                   style: TextStyle(fontSize: 17),
                 ),
@@ -1232,7 +1233,7 @@ class _EditorOwnerSwatch extends StatelessWidget {
           border: Border.all(color: Colors.white70),
         ),
         alignment: Alignment.center,
-        child: Text(
+        child: GameText(
           '${owner + 1}',
           style: TextStyle(
             color: foreground,
@@ -1313,7 +1314,7 @@ class _EditorSpriteButton extends StatelessWidget {
                   color: const Color(0xe6000000),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: Text(
+                child: GameText(
                   '$value',
                   style: const TextStyle(
                     color: Colors.white,
@@ -1347,11 +1348,11 @@ class _EditorPaletteButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Tooltip(
-    message: tooltip,
+    message: context.trNullable(tooltip),
     child: Semantics(
       button: true,
       selected: selected,
-      label: tooltip,
+      label: context.trNullable(tooltip),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
@@ -1422,7 +1423,7 @@ class _ToolButton extends StatelessWidget {
               Icon(icon, size: 17),
               const SizedBox(width: 3),
               Flexible(
-                child: Text(
+                child: GameText(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.fade,
@@ -1760,13 +1761,13 @@ class _EditorSettingsSheetState extends State<_EditorSettingsSheet> {
       child: ListView(
         shrinkWrap: true,
         children: [
-          const Text(
+          const GameText(
             'Карта баптаулары',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 20),
           ),
           const SizedBox(height: 8),
-          const Text(
+          const GameText(
             'Қолданғанда карта жаңа кездейсоқ seed-пен қайта жасалады.',
             textAlign: TextAlign.center,
           ),
@@ -1845,7 +1846,7 @@ class _EditorSettingsSheetState extends State<_EditorSettingsSheet> {
                 diplomacy: _diplomacy,
               ),
             ),
-            child: const Text('Қолдану және қайта жасау'),
+            child: const GameText('Қолдану және қайта жасау'),
           ),
         ],
       ),
@@ -1862,7 +1863,7 @@ class _EditorSettingsSheetState extends State<_EditorSettingsSheet> {
   }) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(title, style: const TextStyle(fontSize: 18)),
+      GameText(title, style: const TextStyle(fontSize: 18)),
       Slider(
         value: value.clamp(min, max),
         min: min,
@@ -1879,7 +1880,7 @@ class _EditorSettingsSheetState extends State<_EditorSettingsSheet> {
       SwitchListTile(
         dense: true,
         contentPadding: EdgeInsets.zero,
-        title: Text(label, style: const TextStyle(fontSize: 18)),
+        title: GameText(label, style: const TextStyle(fontSize: 18)),
         value: value,
         activeTrackColor: _editorGreen,
         onChanged: (next) => setState(() => setter(next)),

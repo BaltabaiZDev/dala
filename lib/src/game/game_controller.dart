@@ -1318,10 +1318,14 @@ class GameController extends ChangeNotifier {
     selectedCargoIndex = null;
     hint = switch (value) {
       PlayerTool.select => 'Әскерді таңдаңыз',
-      PlayerTool.unit1 => '10 теңге: сарбаз қоятын жерді таңдаңыз',
-      PlayerTool.unit2 => '20 теңге: найзагер қоятын жерді таңдаңыз',
-      PlayerTool.unit3 => '30 теңге: рыцарь қоятын жерді таңдаңыз',
-      PlayerTool.unit4 => '40 теңге: батыр қоятын жерді таңдаңыз',
+      PlayerTool.unit1 =>
+        '${mod.rules.unitPricePerLevel} теңге: сарбаз қоятын жерді таңдаңыз',
+      PlayerTool.unit2 =>
+        '${mod.rules.unitPricePerLevel * 2} теңге: найзагер қоятын жерді таңдаңыз',
+      PlayerTool.unit3 =>
+        '${mod.rules.unitPricePerLevel * 3} теңге: рыцарь қоятын жерді таңдаңыз',
+      PlayerTool.unit4 =>
+        '${mod.rules.unitPricePerLevel * 4} теңге: батыр қоятын жерді таңдаңыз',
       PlayerTool.farm => 'Шаруашылық орнын таңдаңыз',
       PlayerTool.tower => 'Мұнара орнын таңдаңыз',
       PlayerTool.strongTower => 'Қамал орнын таңдаңыз',

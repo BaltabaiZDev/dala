@@ -1,3 +1,4 @@
+import '../l10n/game_locale.dart';
 import 'dala_theme.dart';
 import 'dala_art.dart';
 import 'dart:math' as math;
@@ -232,7 +233,7 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
         Expanded(
           child: empty
               ? const Center(
-                  child: Text(
+                  child: GameText(
                     'Жаңа хаттар жоқ',
                     style: TextStyle(fontSize: 17),
                   ),
@@ -282,7 +283,7 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
                         child: const SizedBox(
                           height: 64,
                           child: Center(
-                            child: Text(
+                            child: GameText(
                               'Тазарту',
                               style: TextStyle(fontSize: 20),
                             ),
@@ -360,7 +361,7 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    GameText(
                       '${controller.playerName(conference.originalOwner)} ойыншысының '
                       '${conference.claimTiles.length} даулы жері',
                       style: const TextStyle(
@@ -369,14 +370,14 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
                       ),
                     ),
                     const SizedBox(height: 3),
-                    Text(
+                    GameText(
                       'Қалғаны: $remaining ход · Ұсыныс №${conference.revision}',
                       style: const TextStyle(fontSize: 14),
                     ),
                     if (!hasProposal)
                       const Padding(
                         padding: EdgeInsets.only(top: 7),
-                        child: Text(
+                        child: GameText(
                           'Алғашқы жер бөлу ұсынысы әлі жасалмады.',
                           style: TextStyle(fontSize: 15),
                         ),
@@ -406,12 +407,12 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
                 child: Row(
                   children: [
                     const Expanded(
-                      child: Text(
+                      child: GameText(
                         'Бөлінбегені бұрынғы иесіне қайтады',
                         style: TextStyle(fontSize: 15),
                       ),
                     ),
-                    Text(
+                    GameText(
                       '${unassigned.length} жер · $unassignedValue',
                       style: const TextStyle(
                         fontSize: 15,
@@ -439,7 +440,7 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
                   onPressed: enabled
                       ? () => _startConferenceComposer(conference)
                       : null,
-                  child: Text(
+                  child: GameText(
                     conference.proposer == current ? 'Өзгерту' : 'Қарсы ұсыныс',
                     style: const TextStyle(fontSize: 18),
                   ),
@@ -457,7 +458,7 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
                   onPressed: enabled && hasProposal && !alreadyAccepted
                       ? () => _acceptConference(conference)
                       : null,
-                  child: Text(
+                  child: GameText(
                     alreadyAccepted ? 'Қабылданды' : 'Қабылдау',
                     style: const TextStyle(fontSize: 18),
                   ),
@@ -493,14 +494,14 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  GameText(
                     '${controller.playerName(player)} · $percent%',
                     style: const TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  Text(
+                  GameText(
                     'Бөлінді: $assignedValue / үлесі: $quota',
                     style: const TextStyle(fontSize: 14),
                   ),
@@ -558,7 +559,7 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
             children: [
               const Padding(
                 padding: EdgeInsets.only(bottom: 7),
-                child: Text(
+                child: GameText(
                   'Ойыншыны басып, картадан оған берілетін даулы жерлерді таңдаңыз.',
                   style: TextStyle(fontSize: 15),
                 ),
@@ -583,12 +584,12 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
                 child: Row(
                   children: [
                     const Expanded(
-                      child: Text(
+                      child: GameText(
                         'Бұрынғы иесіне қайтарылады',
                         style: TextStyle(fontSize: 15),
                       ),
                     ),
-                    Text(
+                    GameText(
                       '${unassigned.length} жер · $unassignedValue',
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
@@ -609,7 +610,7 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
               shape: const RoundedRectangleBorder(),
             ),
             onPressed: enabled ? () => _submitConference(conference) : null,
-            child: const Text('Ұсыну', style: TextStyle(fontSize: 18)),
+            child: const GameText('Ұсыну', style: TextStyle(fontSize: 18)),
           ),
         ),
       ],
@@ -729,7 +730,7 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
+                GameText(
                   proposal == null ? 'Хат' : _proposalTitle(proposal),
                   style: const TextStyle(fontSize: 16),
                 ),
@@ -740,14 +741,21 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
                       margin: const EdgeInsets.only(bottom: 5),
                       padding: const EdgeInsets.all(8),
                       color: const Color(0xffd7e7d3),
-                      child: Text(term, style: const TextStyle(fontSize: 13)),
+                      child: GameText(
+                        term,
+                        style: const TextStyle(fontSize: 13),
+                      ),
                     )
                 else
-                  Text(message!.text, style: const TextStyle(fontSize: 14)),
+                  GameText(
+                    message!.text,
+                    translate: false,
+                    style: const TextStyle(fontSize: 14),
+                  ),
                 if (proposal != null && proposal.rationale.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
-                    child: Text(
+                    child: GameText(
                       proposal.rationale,
                       key: const ValueKey('diplomacy-letter-rationale'),
                       style: const TextStyle(fontSize: 13, height: 1.2),
@@ -826,7 +834,7 @@ class _InboxRow extends StatelessWidget {
       color: color,
       padding: const EdgeInsets.fromLTRB(16, 7, 14, 7),
       alignment: Alignment.centerLeft,
-      child: Text(
+      child: GameText(
         title,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
@@ -1001,7 +1009,7 @@ class _DiplomacySheetState extends State<_DiplomacySheet> {
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text(
+              child: GameText(
                 'Төлемдер: + сізге · − сізден',
                 style: TextStyle(fontSize: 12, color: Colors.black87),
               ),
@@ -1118,7 +1126,7 @@ class _DiplomacySheetState extends State<_DiplomacySheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      GameText(
                         controller.playerName(player),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -1127,7 +1135,7 @@ class _DiplomacySheetState extends State<_DiplomacySheet> {
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      Text(
+                      GameText(
                         overview.statusLabel,
                         style: const TextStyle(fontSize: 12),
                       ),
@@ -1136,7 +1144,7 @@ class _DiplomacySheetState extends State<_DiplomacySheet> {
                 ),
                 if (overview.blackMark) ...[
                   Tooltip(
-                    message: 'Араларыңызда қара белгі бар',
+                    message: context.trNullable('Араларыңызда қара белгі бар'),
                     child: DalaAsset(
                       'assets/classic/diplomacy/black_mark_icon.png',
                       width: 23,
@@ -1148,7 +1156,7 @@ class _DiplomacySheetState extends State<_DiplomacySheet> {
                 DiplomacyStatusBadge(status: status, size: 29),
               ],
             ),
-            Text(
+            GameText(
               'Қатынас: ${_signed(overview.relationship)}',
               semanticsLabel:
                   'Ортақ қатынас: ${_signed(overview.relationship)}',
@@ -1228,7 +1236,7 @@ class _DiplomacySheetState extends State<_DiplomacySheet> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         shape: const RoundedRectangleBorder(),
-        title: Text('${controller.playerName(other)} ойыншысына хат'),
+        title: GameText('${controller.playerName(other)} ойыншысына хат'),
         content: TextField(
           controller: input,
           autofocus: true,
@@ -1236,14 +1244,14 @@ class _DiplomacySheetState extends State<_DiplomacySheet> {
           maxLines: 5,
           maxLength: 400,
           decoration: const InputDecoration(
-            hintText: 'Хат мәтіні',
+            hint: GameText('Хат мәтіні'),
             border: OutlineInputBorder(borderRadius: BorderRadius.zero),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Бас тарту'),
+            child: const GameText('Бас тарту'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -1251,7 +1259,7 @@ class _DiplomacySheetState extends State<_DiplomacySheet> {
               shape: const RoundedRectangleBorder(),
             ),
             onPressed: () => Navigator.pop(dialogContext, input.text.trim()),
-            child: const Text('Жіберу'),
+            child: const GameText('Жіберу'),
           ),
         ],
       ),
@@ -1303,12 +1311,12 @@ class _DiplomacySheetState extends State<_DiplomacySheet> {
                     height: 64,
                   ),
                   const SizedBox(height: 16),
-                  Text(
+                  GameText(
                     controller.playerName(other),
                     style: const TextStyle(fontSize: 20),
                   ),
                   const SizedBox(height: 12),
-                  Text(
+                  GameText(
                     removing
                         ? 'Белгі алынады. Қайта қоюға 10 ход күту керек.'
                         : 'Оның сізбен және сіздің достарыңызбен достығы тоқтайды. Кейін екі жақ қарсы тараптың достарымен жаңа достық құра алмайды.\n\nОртақ қатынас: −35.\nБелсенді ортақ соғыс, жер бөлісу немесе қонақ әскер бар болса, одақ бұзылмайды.',
@@ -1351,14 +1359,14 @@ class _DiplomacySheetState extends State<_DiplomacySheet> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         shape: const RoundedRectangleBorder(),
-        title: Text(
+        title: GameText(
           status == DiplomacyStatus.alliance
               ? 'Достықты тоқтату'
               : status == DiplomacyStatus.coalition
               ? 'Әскери одақты тоқтату'
               : 'Соғыс жариялау',
         ),
-        content: Text(
+        content: GameText(
           status == DiplomacyStatus.alliance
               ? 'Достықты шынымен тоқтатасыз ба? '
                     '${controller.playerName(other)} ойыншысына $finePerTurn ақша × $fineTurns ход '
@@ -1371,7 +1379,7 @@ class _DiplomacySheetState extends State<_DiplomacySheet> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Жоқ'),
+            child: const GameText('Жоқ'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -1379,7 +1387,7 @@ class _DiplomacySheetState extends State<_DiplomacySheet> {
               shape: const RoundedRectangleBorder(),
             ),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Иә'),
+            child: const GameText('Иә'),
           ),
         ],
       ),
@@ -1409,9 +1417,9 @@ class _ObligationChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Tooltip(
-    message: obligation.description,
+    message: context.trNullable(obligation.description),
     child: Semantics(
-      label: obligation.description,
+      label: context.trNullable(obligation.description),
       excludeSemantics: true,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
@@ -1421,7 +1429,7 @@ class _ObligationChip extends StatelessWidget {
               : const Color(0xffecd1c9),
           borderRadius: BorderRadius.circular(3),
         ),
-        child: Text(
+        child: GameText(
           obligation.label,
           style: const TextStyle(fontSize: 12, color: Colors.black87),
         ),
@@ -1515,7 +1523,7 @@ class _ExchangePageState extends State<_ExchangePage> {
                             );
                             _openPicker = null;
                           }),
-                          child: const Text(
+                          child: const GameText(
                             '+ Шарт қосу',
                             style: TextStyle(fontSize: 14, color: Colors.black),
                           ),
@@ -1558,7 +1566,10 @@ class _ExchangePageState extends State<_ExchangePage> {
                       );
                     }
                   },
-                  child: const Text('Ұсыну', style: TextStyle(fontSize: 18)),
+                  child: const GameText(
+                    'Ұсыну',
+                    style: TextStyle(fontSize: 18),
+                  ),
                 ),
               ),
             ],
@@ -1608,7 +1619,7 @@ class _ExchangePageState extends State<_ExchangePage> {
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                         child: Row(
                           children: [
-                            Text(
+                            GameText(
                               '${index + 1}.',
                               style: const TextStyle(fontSize: 13),
                             ),
@@ -1623,7 +1634,7 @@ class _ExchangePageState extends State<_ExchangePage> {
                             ),
                             const SizedBox(width: 7),
                             Expanded(
-                              child: Text(
+                              child: GameText(
                                 term.fromSender
                                     ? 'Сіз → ${widget.controller.playerName(widget.other)}'
                                     : '${widget.controller.playerName(widget.other)} → Сіз',
@@ -1645,7 +1656,7 @@ class _ExchangePageState extends State<_ExchangePage> {
                         width: 34,
                         height: 32,
                       ),
-                      icon: const Text(
+                      icon: const GameText(
                         '×',
                         style: TextStyle(fontSize: 22, height: 1),
                       ),
@@ -1663,7 +1674,7 @@ class _ExchangePageState extends State<_ExchangePage> {
                 color: color,
                 alignment: Alignment.centerLeft,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
+                child: GameText(
                   _offerName(term.offer.type),
                   style: const TextStyle(fontSize: 14),
                 ),
@@ -1760,7 +1771,7 @@ class _MailPageState extends State<_MailPage> {
                   ? const Center(
                       child: Padding(
                         padding: EdgeInsets.all(24),
-                        child: Text(
+                        child: GameText(
                           'Бұл елмен хат алмасу әлі басталған жоқ.',
                           textAlign: TextAlign.center,
                           style: TextStyle(fontSize: 17),
@@ -1790,7 +1801,7 @@ class _MailPageState extends State<_MailPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
+                                GameText(
                                   '${widget.controller.playerName(message.from)} · ${message.createdRound}-раунд',
                                   style: const TextStyle(
                                     fontSize: 12,
@@ -1798,8 +1809,9 @@ class _MailPageState extends State<_MailPage> {
                                   ),
                                 ),
                                 const SizedBox(height: 3),
-                                Text(
+                                GameText(
                                   message.text,
+                                  translate: false,
                                   style: const TextStyle(fontSize: 16),
                                 ),
                               ],
@@ -1823,7 +1835,7 @@ class _MailPageState extends State<_MailPage> {
                       maxLength: 400,
                       onChanged: (_) => setState(() {}),
                       decoration: const InputDecoration(
-                        hintText: 'Хабарлама жазыңыз',
+                        hint: GameText('Хабарлама жазыңыз'),
                         filled: true,
                         fillColor: Color(0xfff2f2f2),
                         border: OutlineInputBorder(
@@ -1851,7 +1863,7 @@ class _MailPageState extends State<_MailPage> {
                             showTopSnackBar(context, 'Хат жіберілді');
                             setState(() {});
                           },
-                    child: const Text('Жіберу'),
+                    child: const GameText('Жіберу'),
                   ),
                 ],
               ),
@@ -1914,7 +1926,7 @@ class _CountryInfoPage extends StatelessWidget {
                         DiplomacyStatusBadge(status: relation, size: 34),
                         const SizedBox(width: 10),
                         Flexible(
-                          child: Text(
+                          child: GameText(
                             overview.statusLabel,
                             style: const TextStyle(
                               fontSize: 16,
@@ -1926,7 +1938,7 @@ class _CountryInfoPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
+                  GameText(
                     'Ортақ қатынас: ${_signed(overview.relationship)}',
                     style: const TextStyle(fontSize: 17),
                   ),
@@ -1954,21 +1966,21 @@ class _CountryInfoPage extends StatelessWidget {
                       ),
                     ],
                   ),
-                  Text(
+                  GameText(
                     engine.opinionActionCooldown(current, other) > 0
                         ? 'Келесі әрекетке ${engine.opinionActionCooldown(current, other)} ход'
                         : 'Әр 3 ходта бір әрекет. Өзгеріс екі елге ортақ.',
                     style: const TextStyle(fontSize: 12),
                   ),
                   const SizedBox(height: 8),
-                  Text(
+                  GameText(
                     'Боттар одағы: барлық жұпта кемінде +${engine.militaryAllianceTrustRequired(current, other)}. '
                     'Одақ үлкейген сайын талап өседі; сенімнен бөлек стратегиялық пайда да қажет.',
                     style: const TextStyle(fontSize: 12),
                   ),
                   const _SectionLabel('Қарыздар мен төлемдер'),
                   if (overview.obligations.isEmpty)
-                    const Text(
+                    const GameText(
                       'Араларыңызда қарыз немесе төлем келісімі жоқ.',
                       style: TextStyle(fontSize: 13),
                     )
@@ -1981,7 +1993,7 @@ class _CountryInfoPage extends StatelessWidget {
                           child: _ObligationChip(obligation: obligation),
                         ),
                       ),
-                    const Text(
+                    const GameText(
                       '+ сізге · − сізден. Қарыз — қалған толық сома. '
                       '/ход — келісімдегі төлем; нақты төлем табыс пен қазынаға байланысты. '
                       'x — қалған ход саны.',
@@ -1999,7 +2011,7 @@ class _CountryInfoPage extends StatelessWidget {
                           .take(5))
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 3),
-                      child: Text(
+                      child: GameText(
                         '${event.round}-ход · ${event.reason} ${_signed(event.delta)}',
                         style: const TextStyle(fontSize: 13),
                       ),
@@ -2062,26 +2074,29 @@ class _RelationRow extends StatelessWidget {
             alignment: Alignment.center,
             color:
                 controller.mod.palette[second % controller.mod.palette.length],
-            child: Text('${second + 1}'),
+            child: GameText('${second + 1}'),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                GameText(
                   controller.playerName(second),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 16),
                 ),
-                Text(_statusName(status), style: const TextStyle(fontSize: 13)),
+                GameText(
+                  _statusName(status),
+                  style: const TextStyle(fontSize: 13),
+                ),
               ],
             ),
           ),
           DiplomacyStatusBadge(status: status, size: 30),
           const SizedBox(width: 8),
-          Text(
+          GameText(
             _signed(controller.engine.opinionOf(first, second)),
             style: const TextStyle(fontSize: 14),
           ),
@@ -2153,7 +2168,7 @@ class _DiplomacyBandButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6),
       ),
       onPressed: onPressed,
-      child: Text(
+      child: GameText(
         label,
         textAlign: TextAlign.center,
         style: const TextStyle(fontSize: 15),
@@ -2235,16 +2250,16 @@ class _ClassicTitleBar extends StatelessWidget {
           child: onClose == null
               ? null
               : IconButton(
-                  tooltip: 'Артқа',
+                  tooltip: context.trNullable('Артқа'),
                   onPressed: onClose,
-                  icon: const Text(
+                  icon: const GameText(
                     '←',
                     style: TextStyle(fontSize: 28, color: Colors.black),
                   ),
                 ),
         ),
         Expanded(
-          child: Text(
+          child: GameText(
             title,
             textAlign: TextAlign.center,
             maxLines: 1,
@@ -2273,7 +2288,7 @@ class _ActionIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => IconButton(
-    tooltip: tooltip,
+    tooltip: context.trNullable(tooltip),
     onPressed: enabled ? onTap : null,
     icon: Opacity(
       opacity: enabled ? 1 : .25,
@@ -2342,7 +2357,7 @@ class _OfferEditorState extends State<_OfferEditor> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (widget.title.isNotEmpty) ...[
-            Text(widget.title, style: const TextStyle(fontSize: 14)),
+            GameText(widget.title, style: const TextStyle(fontSize: 14)),
             const SizedBox(height: 3),
           ],
           InkWell(
@@ -2359,7 +2374,7 @@ class _OfferEditorState extends State<_OfferEditor> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
+                    child: GameText(
                       widget.showDetails
                           ? _offerName(offer.type)
                           : _compactOffer(offer),
@@ -2407,7 +2422,7 @@ class _OfferEditorState extends State<_OfferEditor> {
                             bottom: BorderSide(color: Colors.black12),
                           ),
                         ),
-                        child: Text(
+                        child: GameText(
                           _offerName(type),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -2492,7 +2507,7 @@ class _OfferEditorState extends State<_OfferEditor> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(
+                        child: GameText(
                           targets.isEmpty
                               ? 'Қолжетімді мемлекет жоқ'
                               : offer.targetPlayer >= 0 &&
@@ -2537,7 +2552,7 @@ class _OfferEditorState extends State<_OfferEditor> {
                         child: Row(
                           children: [
                             Expanded(
-                              child: Text(
+                              child: GameText(
                                 controller.playerName(player),
                                 style: const TextStyle(fontSize: 17),
                               ),
@@ -2684,11 +2699,11 @@ class _LandPicker extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    const GameText(
                       'Жер мен теңіз активін таңдау',
                       style: TextStyle(fontSize: 17),
                     ),
-                    Text(
+                    GameText(
                       offer.tiles.isEmpty && offer.navalRefs.isEmpty
                           ? 'Ештеңе таңдалмады'
                           : '${offer.tiles.length} жер · '
@@ -2856,7 +2871,7 @@ class _DiplomacyLandSelectionPageState
                             ? 'peace-allocation-cancel'
                             : 'land-selection-cancel',
                       ),
-                      tooltip: 'Бас тарту',
+                      tooltip: context.trNullable('Бас тарту'),
                       onPressed: () => Navigator.pop(context),
                       icon: const Icon(
                         Icons.close,
@@ -2866,7 +2881,7 @@ class _DiplomacyLandSelectionPageState
                     ),
                   ),
                   Expanded(
-                    child: Text(
+                    child: GameText(
                       _conferenceMode
                           ? '${controller.playerName(widget.conferenceRecipient!)} ойыншысының жер үлесі'
                           : 'Жер және теңіз активтері',
@@ -2882,7 +2897,7 @@ class _DiplomacyLandSelectionPageState
                             ? 'peace-allocation-confirm'
                             : 'land-selection-confirm',
                       ),
-                      tooltip: 'Таңдауды растау',
+                      tooltip: context.trNullable('Таңдауды растау'),
                       onPressed:
                           !_conferenceMode &&
                               _selected.isEmpty &&
@@ -3347,8 +3362,8 @@ class _ValueLine extends StatelessWidget {
     child: Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(fontSize: 14)),
-        Text(
+        GameText(label, style: const TextStyle(fontSize: 14)),
+        GameText(
           value,
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
         ),
@@ -3365,7 +3380,7 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     color: DalaTheme.line,
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-    child: Text(text, style: const TextStyle(fontSize: 16)),
+    child: GameText(text, style: const TextStyle(fontSize: 16)),
   );
 }
 

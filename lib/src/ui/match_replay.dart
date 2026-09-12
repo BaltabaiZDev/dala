@@ -1,3 +1,4 @@
+import '../l10n/game_locale.dart';
 import 'dala_theme.dart';
 import 'dart:async';
 
@@ -198,17 +199,21 @@ class MatchStatisticsScreen extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
+                              const GameText(
                                 'Статистика',
                                 style: TextStyle(fontSize: 23),
                               ),
-                              Text('Ход жасалды: ${statistics.turns}'),
-                              Text('Әскер жоғалды: ${statistics.unitsLost}'),
-                              Text('Әскер салынды: ${statistics.unitsBuilt}'),
-                              Text(
+                              GameText('Ход жасалды: ${statistics.turns}'),
+                              GameText(
+                                'Әскер жоғалды: ${statistics.unitsLost}',
+                              ),
+                              GameText(
+                                'Әскер салынды: ${statistics.unitsBuilt}',
+                              ),
+                              GameText(
                                 'Жұмсалған ақша: \$${statistics.moneySpent}',
                               ),
-                              Text(
+                              GameText(
                                 'Уақыт: $minutes:${seconds.toString().padLeft(2, '0')}',
                               ),
                             ],
@@ -320,12 +325,12 @@ class _MatchReplayScreenState extends State<MatchReplayScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   IconButton(
-                    tooltip: 'Тоқтату',
+                    tooltip: context.trNullable('Тоқтату'),
                     onPressed: _stop,
                     icon: const Icon(Icons.stop, size: 39),
                   ),
                   IconButton(
-                    tooltip: _playing ? 'Пауза' : 'Ойнату',
+                    tooltip: context.trNullable(_playing ? 'Пауза' : 'Ойнату'),
                     onPressed: () {
                       setState(() => _playing = !_playing);
                       _schedule();
@@ -336,7 +341,7 @@ class _MatchReplayScreenState extends State<MatchReplayScreen> {
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Жылдамдық',
+                    tooltip: context.trNullable('Жылдамдық'),
                     onPressed: () {
                       setState(() => _fast = !_fast);
                       _schedule();
@@ -345,7 +350,7 @@ class _MatchReplayScreenState extends State<MatchReplayScreen> {
                     icon: const Icon(Icons.fast_forward, size: 43),
                   ),
                   IconButton(
-                    tooltip: 'Осы кадрды сақтау',
+                    tooltip: context.trNullable('Осы кадрды сақтау'),
                     onPressed: () async {
                       await widget.saves.save(_controller.state);
                       if (context.mounted) {
@@ -380,7 +385,7 @@ class _MatchReplayScreenState extends State<MatchReplayScreen> {
                   horizontal: 10,
                   vertical: 6,
                 ),
-                child: Text(
+                child: GameText(
                   'Ход $_index / ${widget.frames.length - 1}',
                   style: const TextStyle(color: Colors.white),
                 ),
@@ -419,7 +424,7 @@ class _SummaryButton extends StatelessWidget {
           BoxShadow(color: Colors.black45, blurRadius: 7, offset: Offset(0, 5)),
         ],
       ),
-      child: Text(label, style: const TextStyle(fontSize: 25)),
+      child: GameText(label, style: const TextStyle(fontSize: 25)),
     ),
   );
 }

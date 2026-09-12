@@ -1538,13 +1538,13 @@ void main() {
     controller.dispose();
   });
 
-  testWidgets('each human player restores their own camera zoom', (
+  testWidgets('each human player restores their own camera zoom and position', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
     final controller = GameController(
       mod: mod,
-      state: _linearState([0, 0, 1, 1]),
+      state: _splitEmpireCameraState(),
       saves: SaveRepository(),
       autosaveEnabled: false,
     );
@@ -1556,8 +1556,15 @@ void main() {
     final camera = viewer.transformationController;
     final zoomed = camera.value.clone()
       ..setEntry(0, 0, 1.73)
-      ..setEntry(1, 1, 1.73);
-    camera.value = zoomed;
+      ..setEntry(1, 1, 1.73)
+      ..setEntry(0, 3, -130);
+    final cameraBounds = MapCameraBounds(
+      viewport: tester.getSize(find.byType(MapViewport)),
+      canvas: HexBoard.canvasSize(controller.state),
+      minScale: viewer.minScale,
+    );
+    camera.value = cameraBounds.constrain(zoomed);
+    final firstView = camera.value.clone();
 
     final firstTurn = controller.finishTurn();
     await tester.pump();
@@ -1578,6 +1585,8 @@ void main() {
 
     expect(controller.state.turn, 0);
     expect(camera.value.getMaxScaleOnAxis(), closeTo(1.73, .01));
+    expect(camera.value.entry(0, 3), closeTo(firstView.entry(0, 3), .01));
+    expect(camera.value.entry(1, 3), closeTo(firstView.entry(1, 3), .01));
 
     final thirdTurn = controller.finishTurn();
     await tester.pump();
@@ -1591,24 +1600,19 @@ void main() {
   });
 
   testWidgets(
-    'human turn camera frames separate provinces and naval objects together',
+    'startup camera frames a home province instead of distant islands and ships',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       final state = _splitEmpireCameraState();
-      final expectedCenters = HexBoard.playerAssetCenters(state, 0);
-      expect(expectedCenters, hasLength(5));
-      expect(
-        expectedCenters
-            .map((center) => center.dx)
-            .reduce((a, b) => a < b ? a : b),
-        HexBoard.centerOf(state.hexes[0]).dx,
-      );
-      expect(
-        expectedCenters
-            .map((center) => center.dx)
-            .reduce((a, b) => a > b ? a : b),
-        HexBoard.centerOfWater(state, state.waterCells.last).dx,
-      );
+      final expectedCenters = HexBoard.playerFocusCenters(state, 0);
+      expect(expectedCenters, [
+        HexBoard.centerOf(state.hexes[0]),
+        HexBoard.centerOf(state.hexes[1]),
+      ]);
 
       final controller = GameController(
         mod: mod,
@@ -1623,18 +1627,12 @@ void main() {
       final transform = viewer.transformationController.value;
       final scale = transform.entry(0, 0);
       final viewport = tester.getSize(find.byType(MapViewport));
-      final focusedWorldX =
-          (viewport.width / 2 - transform.entry(0, 3)) / scale;
-      final minX = expectedCenters
-          .map((center) => center.dx)
-          .reduce((a, b) => a < b ? a : b);
-      final maxX = expectedCenters
-          .map((center) => center.dx)
-          .reduce((a, b) => a > b ? a : b);
-
-      // The empire midpoint is preferred, but edge empires are clamped to the
-      // finite board so the camera never exposes empty space beyond the map.
-      expect(focusedWorldX, inInclusiveRange(minX, maxX));
+      for (final center in expectedCenters) {
+        final visible =
+            center * scale +
+            Offset(transform.entry(0, 3), transform.entry(1, 3));
+        expect((Offset.zero & viewport).contains(visible), isTrue);
+      }
       final canvas = HexBoard.canvasSize(state);
       final scaledWidth = canvas.width * scale;
       if (scaledWidth <= viewport.width) {
@@ -1648,9 +1646,40 @@ void main() {
           inInclusiveRange(viewport.width - scaledWidth, 0),
         );
       }
-      expect(scale, lessThan(1));
+      expect(scale, greaterThan(1));
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
+    },
+  );
+
+  test(
+    'startup focus chooses largest province and supports fleet-only players',
+    () {
+      final state = _splitEmpireCameraState();
+      final larger = state.provinces.lastWhere((p) => p.owner == 0);
+      state.hexes[8]
+        ..active = true
+        ..owner = 0;
+      state.provinces[state.provinces.indexOf(larger)] = Province(
+        id: larger.id,
+        owner: larger.owner,
+        tiles: [...larger.tiles, 8],
+        money: larger.money,
+        capital: larger.capital,
+      );
+      expect(HexBoard.playerFocusCenters(state, 0), [
+        for (final index in [...larger.tiles, 8])
+          HexBoard.centerOf(state.hexes[index]),
+      ]);
+      state.provinces.removeWhere((p) => p.owner == 0);
+      for (final tile in state.hexes) {
+        if (tile.owner == 0) tile.owner = -1;
+      }
+      expect(HexBoard.playerFocusCenters(state, 0), [
+        HexBoard.centerOfWater(state, state.waterCells.last),
+      ]);
+      state.waterCells.last.boat = null;
+      expect(HexBoard.playerFocusCenters(state, 0), isEmpty);
     },
   );
 

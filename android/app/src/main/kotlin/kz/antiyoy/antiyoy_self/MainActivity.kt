@@ -38,7 +38,10 @@ class MainActivity : FlutterActivity() {
                             val files = HashMap<String, ByteArray>()
                             for ((bucket, parent) in buckets) {
                                 for (file in children(tree, parent)) {
-                                    if (file.directory || !file.name.endsWith(if (bucket == "mods") ".dalamod" else ".dalamap", true)) continue
+                                    val supported = if (bucket == "mods")
+                                        file.name.endsWith(".dalamod", true) || file.name.endsWith(".zip", true)
+                                    else file.name.endsWith(".dalamap", true)
+                                    if (file.directory || !supported) continue
                                     require(files.size < 100) { "Too many content packages" }
                                     files["$bucket/${file.name}"] = if (file.size > 16 * 1024 * 1024) ByteArray(0) else
                                         contentResolver.openInputStream(file.uri)!!.use { input ->

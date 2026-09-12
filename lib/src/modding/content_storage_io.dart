@@ -64,9 +64,9 @@ class PlatformContentStorage implements ContentStorage, ContentFolderPicker {
       ).list(followLinks: false)) {
         if (file is! File) continue;
         final name = file.uri.pathSegments.last;
-        if (!name.toLowerCase().endsWith(
-          folder == 'mods' ? '.dalamod' : '.dalamap',
-        )) {
+        if (!(folder == 'mods'
+            ? ContentPackage.isModFile(name)
+            : name.toLowerCase().endsWith('.dalamap'))) {
           continue;
         }
         if (files.length >= 100) {
@@ -86,7 +86,10 @@ class PlatformContentStorage implements ContentStorage, ContentFolderPicker {
   }
 
   Future<File> _file(String path) async {
-    if (!RegExp(r'^(mods|maps)/[^/\\:]+\.(dalamod|dalamap)$').hasMatch(path)) {
+    if (!RegExp(
+      r'^(mods/[^/\\:]+\.(dalamod|zip)|maps/[^/\\:]+\.dalamap)$',
+      caseSensitive: false,
+    ).hasMatch(path)) {
       throw const FormatException('Файл атауы жарамсыз.');
     }
     return File('${(await _root()).path}/$path');
