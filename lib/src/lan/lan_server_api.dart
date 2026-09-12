@@ -1,3 +1,4 @@
+import 'lan_address.dart';
 import 'dart:async';
 
 class LanServerBinding {
@@ -20,7 +21,15 @@ abstract interface class LanServerConnection {
 abstract interface class LanServerBackend {
   Stream<LanServerConnection> get connections;
 
-  Future<LanServerBinding> start({int port = 7358});
+  Future<LanServerBinding> start({int port = lanDefaultPort});
 
   Future<void> close();
+}
+
+class LanPortUnavailable implements Exception {
+  const LanPortUnavailable(this.port);
+  final int port;
+  @override
+  String toString() =>
+      'Порт $port ашылмады. LAN баптауынан басқа порт таңдаңыз.';
 }

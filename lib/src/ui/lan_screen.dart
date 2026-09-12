@@ -1,3 +1,6 @@
+import '../lan/lan_address.dart';
+import '../lan/lan_server_api.dart';
+import '../persistence/lan_settings_repository.dart';
 import '../l10n/game_locale.dart';
 import 'dala_theme.dart';
 import 'dart:async';
@@ -49,6 +52,13 @@ class _LanScreenState extends State<LanScreen> {
   final TextEditingController _name = TextEditingController(text: 'Ойыншы');
   final TextEditingController _address = TextEditingController();
   final TextEditingController _roomCode = TextEditingController();
+  final TextEditingController _port = TextEditingController(
+    text: '$lanDefaultPort',
+  );
+  final _lanSettings = LanSettingsRepository();
+  late final Future<void> _portInitialization;
+  bool _portLoaded = false;
+  bool _portEdited = false;
   bool _working = false;
   late bool _useMod;
   List<String> _selectedHashes = [];
@@ -66,9 +76,17 @@ class _LanScreenState extends State<LanScreen> {
       _roomStack = widget.library!.compose(_selectedHashes);
     }
     final browserHost = Uri.base.host;
-    _address.text = browserHost.isNotEmpty && browserHost != 'localhost'
-        ? '$browserHost:$lanDefaultPort'
-        : '127.0.0.1:$lanDefaultPort';
+    if (browserHost.isNotEmpty &&
+        browserHost != 'localhost' &&
+        browserHost != '127.0.0.1') {
+      _address.text = browserHost;
+    }
+    _port.addListener(() => _portEdited = true);
+    _portInitialization = _lanSettings.loadPort().then((port) {
+      if (!mounted) return;
+      if (!_portEdited) _port.text = '$port';
+      _portLoaded = true;
+    });
   }
 
   @override
@@ -76,11 +94,21 @@ class _LanScreenState extends State<LanScreen> {
     _name.dispose();
     _address.dispose();
     _roomCode.dispose();
+    final port = int.tryParse(_port.text.trim());
+    if ((_portLoaded || _portEdited) &&
+        port != null &&
+        port >= 1 &&
+        port <= 65535) {
+      unawaited(_lanSettings.savePort(port));
+    }
+    _port.dispose();
     super.dispose();
   }
 
   Future<void> _host() async {
     if (_working) return;
+    await _portInitialization;
+    if (!mounted) return;
     if (!lanHostingSupported) {
       showTopSnackBar(
         context,
@@ -88,6 +116,13 @@ class _LanScreenState extends State<LanScreen> {
       );
       return;
     }
+    final port = int.tryParse(_port.text.trim());
+    if (port == null || port < 1 || port > 65535) {
+      showTopSnackBar(context, 'Порт 1–65535 аралығында болуы керек.');
+      return;
+    }
+    await _lanSettings.savePort(port);
+    if (!mounted) return;
     final roomMod = _roomMod;
     GameState? mapState;
     try {
@@ -112,7 +147,7 @@ class _LanScreenState extends State<LanScreen> {
       await runWithAntiyoyLoader(
         context,
         semanticsLabel: 'LAN бөлмесі ашылуда',
-        task: host.start,
+        task: () => host.start(port: port),
       );
       if (!mounted) {
         await host.close();
@@ -130,7 +165,12 @@ class _LanScreenState extends State<LanScreen> {
       );
     } catch (exception) {
       if (mounted) {
-        showTopSnackBar(context, 'LAN бөлмесі ашылмады: $exception');
+        showTopSnackBar(
+          context,
+          exception is LanPortUnavailable
+              ? exception.toString()
+              : 'Бөлме ашылмады: $exception',
+        );
       }
       await host.close();
     } finally {
@@ -140,11 +180,25 @@ class _LanScreenState extends State<LanScreen> {
 
   Future<void> _join() async {
     if (_working) return;
+    await _portInitialization;
+    if (!mounted) return;
     final code = _roomCode.text.replaceAll(RegExp('[^0-9]'), '');
     if (code.length != 6) {
       showTopSnackBar(context, '6 саннан тұратын бөлме кодын жазыңыз.');
       return;
     }
+    late final Uri address;
+    try {
+      address = lanAddressUri(
+        _address.text,
+        defaultPort: int.tryParse(_port.text.trim()) ?? 0,
+      );
+      await _lanSettings.savePort(int.parse(_port.text.trim()));
+    } on FormatException catch (error) {
+      if (mounted) showTopSnackBar(context, error.message);
+      return;
+    }
+    if (!mounted) return;
     final client = LanRoomClient(
       defaultMod: widget.defaultMod ?? widget.library?.defaultMod,
       installedMods: [
@@ -154,7 +208,7 @@ class _LanScreenState extends State<LanScreen> {
     setState(() => _working = true);
     try {
       await client.connect(
-        address: _address.text,
+        address: address.toString(),
         roomCode: code,
         name: _name.text,
       );
@@ -284,7 +338,7 @@ class _LanScreenState extends State<LanScreen> {
     onBack: () => Navigator.pop(context),
     child: Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(28, 96, 28, 30),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 430),
           child: _LanPanel(
@@ -361,6 +415,34 @@ class _LanScreenState extends State<LanScreen> {
                       ? null
                       : (value) => setState(() => _selectedMap = value),
                 ),
+                ExpansionTile(
+                  key: const ValueKey('lan-network-settings'),
+                  title: const GameText('LAN баптауы'),
+                  tilePadding: EdgeInsets.zero,
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.only(
+                        top: MediaQuery.textScalerOf(context).scale(12),
+                      ),
+                      child: _LanField(
+                        key: const ValueKey('lan-port'),
+                        controller: _port,
+                        label: 'Порт · әдепкі 7777',
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(5),
+                        ],
+                      ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: GameText(
+                        'Хост пен қонақта порт бірдей болсын. IP-ге портты қосып жазу міндетті емес.',
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 18),
                 _LanActionBand(
                   key: const ValueKey('lan-host-button'),
@@ -381,7 +463,7 @@ class _LanScreenState extends State<LanScreen> {
                 _LanField(
                   key: const ValueKey('lan-address'),
                   controller: _address,
-                  label: 'Хост IP · мысалы 192.168.1.20:7358',
+                  label: 'Хост IP · мысалы 192.168.1.20',
                   keyboardType: TextInputType.url,
                 ),
                 const SizedBox(height: 10),
@@ -506,7 +588,7 @@ class _LanHostLobbyState extends State<_LanHostLobby> {
         title: 'LAN · Хост',
         onBack: () => Navigator.pop(context),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 92, 24, 28),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
           children: [
             _LanPanel(
               child: Column(
@@ -532,23 +614,23 @@ class _LanHostLobbyState extends State<_LanHostLobby> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  for (final address in host.joinAddresses)
-                    InkWell(
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: address));
-                        showTopSnackBar(context, 'IP көшірілді: $address');
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 5),
-                        child: GameText(
-                          address,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
+                  if (host.binding != null) ...[
+                    const GameText('Қосылатын IP'),
+                    _JoinAddress(address: host.binding!.addresses.first),
+                    GameText('Порт: ${host.binding!.port}'),
+                    if (host.binding!.addresses.first == '127.0.0.1')
+                      const GameText(
+                        'Желі IP-і табылмады. Wi‑Fi немесе хотспотты қосып, бөлмені қайта ашыңыз.',
                       ),
-                    ),
+                    if (host.binding!.addresses.length > 1)
+                      ExpansionTile(
+                        title: const GameText('Басқа желі адрестері'),
+                        children: [
+                          for (final address in host.binding!.addresses.skip(1))
+                            _JoinAddress(address: address),
+                        ],
+                      ),
+                  ],
                 ],
               ),
             ),
@@ -758,7 +840,7 @@ class _LanClientLobbyState extends State<_LanClientLobby> {
         if (context.mounted) Navigator.pop(context);
       },
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(24, 100, 24, 28),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
         children: [
           _LanPanel(
             child: Column(
@@ -974,42 +1056,43 @@ class _LanScaffold extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           const AntiyoyAnimatedParticles(),
-          child,
           SafeArea(
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-                child: Row(
-                  children: [
-                    Material(
-                      color: DalaTheme.gold,
-                      borderRadius: BorderRadius.circular(14),
-                      elevation: 5,
-                      child: InkWell(
-                        onTap: onBack,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                  child: Row(
+                    children: [
+                      Material(
+                        color: DalaTheme.gold,
                         borderRadius: BorderRadius.circular(14),
-                        child: const SizedBox(
-                          width: 62,
-                          height: 52,
-                          child: Icon(Icons.arrow_back, size: 32),
+                        elevation: 5,
+                        child: InkWell(
+                          onTap: onBack,
+                          borderRadius: BorderRadius.circular(14),
+                          child: const SizedBox(
+                            width: 62,
+                            height: 52,
+                            child: Icon(Icons.arrow_back, size: 32),
+                          ),
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: GameText(
-                        title,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 25,
-                          fontWeight: FontWeight.w900,
+                      Expanded(
+                        child: GameText(
+                          title,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 25,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 62),
-                  ],
+                      const SizedBox(width: 62),
+                    ],
+                  ),
                 ),
-              ),
+                Expanded(child: child),
+              ],
             ),
           ),
         ],
@@ -1081,20 +1164,44 @@ class _LanActionBand extends StatelessWidget {
     color: enabled ? color : Colors.grey.shade500,
     child: InkWell(
       onTap: enabled ? onTap : null,
-      child: SizedBox(
-        height: 48,
-        child: Center(
-          child: GameText(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-              color: enabled ? Colors.black : Colors.black54,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+          child: Center(
+            child: GameText(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: enabled ? Colors.black : Colors.black54,
+              ),
             ),
           ),
         ),
       ),
+    ),
+  );
+}
+
+class _JoinAddress extends StatelessWidget {
+  const _JoinAddress({required this.address});
+  final String address;
+  @override
+  Widget build(BuildContext context) => TextButton.icon(
+    key: ValueKey('lan-copy-$address'),
+    icon: const Icon(Icons.copy, size: 18),
+    onPressed: () {
+      Clipboard.setData(ClipboardData(text: address));
+      showTopSnackBar(context, 'IP көшірілді: $address');
+    },
+    label: GameText(
+      address == '127.0.0.1'
+          ? '$address · ${context.tr('Осы құрылғыда ғана')}'
+          : address,
+      translate: false,
+      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
     ),
   );
 }

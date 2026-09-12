@@ -1,9 +1,10 @@
+export 'lan_address.dart' show lanDefaultPort;
 import '../game/models.dart';
 import '../modding/game_mod.dart';
 
 // Timed military treaties must not be interpreted as eternal by older clients.
 const int lanProtocolVersion = 6;
-const int lanDefaultPort = 7358;
+
 const int lanMaxPlayerNameLength = 20;
 const int lanMaxMessageLength = 512;
 

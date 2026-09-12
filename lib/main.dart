@@ -1,4 +1,5 @@
 import 'src/ui/dala_theme.dart';
+import 'src/ui/dala_viewport.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -55,6 +56,7 @@ class _AntiyoyAppState extends State<AntiyoyApp> {
           locale: language.locale,
           supportedLocales: const [Locale('kk'), Locale('ru'), Locale('en')],
           localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          builder: (context, child) => DalaViewport(child: child!),
           home: HomeScreen(gameMod: widget.gameMod, saves: widget.saves),
         ),
       ),

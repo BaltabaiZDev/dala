@@ -165,7 +165,7 @@ void main() {
     );
   });
 
-  test('strong human receives a material concession, not bare friendship', () {
+  test('strong human can receive a funded material concession for a pact', () {
     final state = strategicFixture();
     final e = GameEngine(mod: mod, state: state);
     for (final tile
@@ -180,7 +180,7 @@ void main() {
         .toList();
     expect(plans, isNotEmpty);
     expect(
-      plans.every(
+      plans.any(
         (p) => p.terms.any(
           (t) =>
               t.fromSender &&

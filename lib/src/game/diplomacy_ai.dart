@@ -44,6 +44,7 @@ class DiplomacyAiSnapshot {
     borders = List.generate(n, (_) => List.filled(n, 0));
     freeBorders = List.filled(n, 0);
     borderTiles = List.generate(n, (_) => List.generate(n, (_) => <int>[]));
+    landNet = List.filled(state.hexes.length, 0);
     final fundedTiles = <int>{};
     for (final p in state.provinces) {
       land[p.owner] += p.tiles.length;
@@ -78,7 +79,7 @@ class DiplomacyAiSnapshot {
           if (tile.object == TileObject.farm && !state.config.slayRules) {
             income[owner] += rules.farmIncome;
           }
-          upkeep[owner] += switch (tile.object) {
+          final buildingUpkeep = switch (tile.object) {
             TileObject.tower => state.config.slayRules ? 0 : rules.towerUpkeep,
             TileObject.strongTower =>
               state.config.slayRules ? 0 : rules.strongTowerUpkeep,
@@ -89,6 +90,14 @@ class DiplomacyAiSnapshot {
             TileObject.artillery3 => rules.artilleryUpkeep[3],
             _ => 0,
           };
+          upkeep[owner] += buildingUpkeep;
+          landNet[tile.index] =
+              1 -
+              (tile.hasTree ? 1 : 0) +
+              (tile.object == TileObject.farm && !state.config.slayRules
+                  ? rules.farmIncome
+                  : 0) -
+              buildingUpkeep;
           if (tile.object == TileObject.tower) power[owner] += 4;
           if (tile.object == TileObject.strongTower) power[owner] += 8;
         }
@@ -97,7 +106,9 @@ class DiplomacyAiSnapshot {
       if (unit != null) {
         final sovereign = engine.unitOwnerAt(tile.index);
         if (sovereign >= 0 && sovereign < n) {
-          upkeep[sovereign] += engine.unitUpkeepAtStrength(unit.strength);
+          final cost = engine.unitUpkeepAtStrength(unit.strength);
+          upkeep[sovereign] += cost;
+          if (sovereign == owner) landNet[tile.index] -= cost;
           power[sovereign] += unit.strength * unit.strength * 4;
         }
       }
@@ -110,6 +121,14 @@ class DiplomacyAiSnapshot {
         upkeep[owner] +=
             (boat.level == 1 ? rules.boat1Upkeep : rules.boat2Upkeep) +
             math.max(0, rules.navalSupplyUpkeep);
+        var transferCost = boat.level == 1
+            ? rules.boat1Upkeep
+            : rules.boat2Upkeep;
+        for (final unit in boat.cargo) {
+          transferCost += engine.unitUpkeepAtStrength(unit.strength) * 3 ~/ 2;
+        }
+        navalNet[NavalAssetRef(kind: NavalAssetKind.boat, id: boat.id)] =
+            -transferCost;
         power[owner] += boat.level * 8;
         for (final unit in boat.cargo) {
           upkeep[owner] += engine.unitUpkeepAtStrength(unit.strength) * 3 ~/ 2;
@@ -119,6 +138,8 @@ class DiplomacyAiSnapshot {
       final fort = cell.seaFort;
       if (fort != null) {
         upkeep[fort.owner] += rules.seaFortUpkeep;
+        navalNet[NavalAssetRef(kind: NavalAssetKind.seaFort, id: fort.id)] =
+            -rules.seaFortUpkeep;
         power[fort.owner] += 12;
       }
     }
@@ -142,6 +163,11 @@ class DiplomacyAiSnapshot {
     totalLand = land.fold(0, (sum, value) => sum + value);
   }
   late final List<int> land, cash, income, upkeep, net, freeBorders, alive;
+  late final List<int> landNet;
+  final Map<NavalAssetRef, int> navalNet = {};
+  int assetNet(DiplomacyOffer offer) =>
+      offer.tiles.fold(0, (sum, i) => sum + landNet[i]) +
+      offer.navalRefs.fold(0, (sum, ref) => sum + (navalNet[ref] ?? 0));
   late final List<double> power;
   late final List<List<int>> borders;
   late final List<List<List<int>>> borderTiles;
@@ -162,6 +188,7 @@ class StrategicDiplomacyAi {
   int evaluatedPlans = 0;
   int validatedPlans = 0;
   int snapshotsBuilt = 1;
+  final Set<int> consideredPartners = {};
   DiplomacyTactic? chosenTactic;
   final Map<int, double> _blocPowerCache = {};
   final Map<(int, int), int?> _threatCache = {};
@@ -178,8 +205,24 @@ class StrategicDiplomacyAi {
     player,
     () => engine
         .militaryAllianceComponent(player)
-        .fold(0.0, (sum, p) => sum + snapshot.power[p]),
+        .fold(0.0, (sum, p) => sum + _mobilizedPower(p)),
   );
+  // A large treasury alone is not a sustainable army. Count only recruitment
+  // that both cash and the next few turns' operating surplus can support.
+  double _mobilizedPower(int p) =>
+      snapshot.power[p] +
+      math.min(
+            snapshot.spare(p, horizon),
+            math.max(0, snapshot.net[p]) * horizon,
+          ) *
+          .4;
+
+  Set<int> _warOpponents(int owner, int target) => {
+    ...engine.militaryAllianceComponent(target),
+    for (final enemy in _enemies(owner))
+      ...engine.militaryAllianceComponent(enemy),
+  }..removeAll(engine.militaryAllianceComponent(owner));
+
   List<int> _enemies(int p) =>
       snapshot.alive.where((e) => engine.areEnemies(p, e)).toList();
   bool _commonEnemy(int a, int b) => snapshot.alive.any(
@@ -290,18 +333,34 @@ class StrategicDiplomacyAi {
     return value.clamp(4, 160);
   }
 
-  double warValue(int owner, int target) {
+  double warValue(int owner, int target, {int? supportingPlayer}) {
     if (owner == target ||
         engine.hasMilitaryAccess(owner, target) ||
         !engine.canDeclareWar(owner, target) ||
         !snapshot.touches(owner, target)) {
       return -10000;
     }
-    final ours = math.max(1.0, _blocPower(owner));
-    final theirs = math.max(1.0, _blocPower(target));
+    final opponents = _warOpponents(owner, target);
+    final theirs = math.max(
+      1.0,
+      opponents.fold(0.0, (sum, p) => sum + _mobilizedPower(p)),
+    );
+    var ours = math.max(1.0, _blocPower(owner));
+    if (supportingPlayer != null &&
+        engine.areEnemies(supportingPlayer, target)) {
+      final independentSupport =
+          engine.militaryAllianceComponent(supportingPlayer).toSet()
+            ..removeAll(engine.militaryAllianceComponent(owner))
+            ..removeAll(opponents);
+      ours +=
+          independentSupport.fold(0.0, (sum, p) => sum + _mobilizedPower(p)) *
+          .5;
+    }
+    // Count each sovereign once across all fronts, even if multiple enemies
+    // belong to one coalition. A payment cannot buy a plainly doomed war.
+    if (ours < theirs * .6) return -10000;
     var result =
-        22 * (ours / theirs - 1) + math.min(20, snapshot.land[target]) * .7;
-    result -= _enemies(owner).length * (12 + tier * 3);
+        30 * (ours / theirs - 1) + math.min(20, snapshot.land[target]) * .7;
     if (snapshot.distressed(owner)) result -= 28;
     if (engine.opinionOf(owner, target) >= 35) result -= 22;
     return result.clamp(-200, 100);
@@ -331,6 +390,8 @@ class StrategicDiplomacyAi {
         if (tile.object == TileObject.farm) value += 6 + tier * 2;
       }
     }
+    final operating = snapshot.assetNet(offer);
+    value += operating * horizon * (giver == owner ? 1.0 : .75);
     // Naval objects retain real appraised prices but no optimistic route bonus.
     for (final ref in offer.navalRefs) {
       value += engine.diplomacyNavalPrice(ref);
@@ -347,6 +408,43 @@ class StrategicDiplomacyAi {
     var cashLeft = snapshot.cash[owner];
     var otherCash = snapshot.cash[other];
     var promised = 0;
+    var receivedCash = 0;
+    var projectedNet = snapshot.net[owner];
+    var otherNet = snapshot.net[other];
+    var ownReplacedCost = 0;
+    var otherReplacedCost = 0;
+    final subsidyGivers = <int>{};
+    // Project the whole exchange first, so clause order cannot hide lost farm
+    // income, imported army upkeep or renewal of an existing subsidy.
+    for (final term in terms) {
+      final giver = term.fromSender ? from : to;
+      final own = giver == owner;
+      if (term.offer.type == DiplomacyExchangeType.lands) {
+        final delta = snapshot.assetNet(term.offer) * (own ? -1 : 1);
+        projectedNet += delta;
+        otherNet -= delta;
+      } else if (term.offer.type == DiplomacyExchangeType.subsidies) {
+        if (!subsidyGivers.add(giver)) return -10000;
+        for (final existing in state.diplomacySubsidies) {
+          if (existing.payer != giver ||
+              existing.receiver != (own ? other : owner) ||
+              existing.mandatory ||
+              existing.turnsLeft <= 0 ||
+              engine.areEnemies(existing.payer, existing.receiver)) {
+            continue;
+          }
+          if (own) {
+            projectedNet += existing.amount;
+            ownReplacedCost += existing.amount * existing.turnsLeft;
+          } else {
+            otherNet += existing.amount;
+            otherReplacedCost +=
+                existing.amount * math.min(horizon, existing.turnsLeft);
+          }
+        }
+      }
+    }
+    var otherRecurringBudget = math.max(0, otherNet);
     var sold = 0;
     var peace = false;
     final relationTypes = <DiplomacyExchangeType>{};
@@ -359,7 +457,10 @@ class StrategicDiplomacyAi {
           continue;
         case DiplomacyExchangeType.friendship:
           if (relationTypes.add(offer.type)) {
-            score += friendshipValue(owner, other);
+            final duration = offer.duration > 0 ? offer.duration : 12;
+            score +=
+                friendshipValue(owner, other) *
+                math.min(1.0, duration / horizon);
           }
         case DiplomacyExchangeType.militaryAlliance:
           if (!_blocConsents(from, to)) return -10000;
@@ -380,23 +481,24 @@ class StrategicDiplomacyAi {
           } else {
             final received = math.min(otherCash, offer.amount);
             otherCash -= received;
+            receivedCash += received;
             score += received * (snapshot.distressed(owner) ? 1.25 : 1);
           }
         case DiplomacyExchangeType.subsidies:
           if (own) {
             promised += offer.amount;
-            score -=
-                offer.amount * math.min(horizon + 2, offer.duration).toDouble();
+            score -= offer.amount * offer.duration - ownReplacedCost.toDouble();
           } else {
-            final reliable = math.min(
-              offer.amount,
-              math.max(0, snapshot.net[other]),
-            );
+            final reliable = math.min(offer.amount, otherRecurringBudget);
+            otherRecurringBudget -= reliable;
             final trust = (.55 + engine.opinionOf(owner, other) / 200).clamp(
               .2,
               .95,
             );
-            score += reliable * math.min(horizon, offer.duration) * trust;
+            score +=
+                (reliable * math.min(horizon, offer.duration) -
+                    otherReplacedCost) *
+                trust;
           }
         case DiplomacyExchangeType.lands:
           if (own) sold += offer.tiles.length;
@@ -404,15 +506,12 @@ class StrategicDiplomacyAi {
           score += own ? -value : value;
         case DiplomacyExchangeType.warDeclaration:
           if (own) {
-            final value = warValue(owner, offer.targetPlayer);
-            final enemyPower = _blocPower(offer.targetPlayer);
-            // Recruiting an ally can split a stronger opponent's forces, but
-            // even a large bribe must not turn a doomed war into a good deal.
-            final supportingPower = engine.areEnemies(other, offer.targetPlayer)
-                ? _blocPower(other) * .5
-                : 0.0;
+            final value = warValue(
+              owner,
+              offer.targetPlayer,
+              supportingPlayer: other,
+            );
             if (value < -80 ||
-                _blocPower(owner) + supportingPower < enemyPower * .6 ||
                 engine.opinionOf(owner, offer.targetPlayer) >= 50) {
               return -10000;
             }
@@ -429,13 +528,20 @@ class StrategicDiplomacyAi {
       }
     }
     if (cashLeft < 0 || sold >= snapshot.land[owner]) return -10000;
-    if (promised > math.max(0, snapshot.net[owner]) ~/ 2 ||
+    if (promised > math.max(0, projectedNet) ~/ 2 ||
         (promised > 0 && cashLeft < promised * math.min(3, horizon))) {
       return -10000;
     }
     if (!peace &&
         cashLeft < snapshot.reserve(owner, horizon) &&
         cashLeft < snapshot.cash[owner]) {
+      return -10000;
+    }
+    final netAfter = projectedNet - promised;
+    // A land/army purchase must not create an unfunded deficit. A distressed
+    // seller may still exchange frontier land for enough cash to recover.
+    if (netAfter < snapshot.net[owner] &&
+        cashLeft + receivedCash + math.min(0, netAfter) * horizon < 10) {
       return -10000;
     }
     if (sold > 0 && sold * 3 >= snapshot.land[owner]) score -= 40;
@@ -549,10 +655,9 @@ class StrategicDiplomacyAi {
           duration: duration,
         ),
       );
-      final strongerHuman =
-          state.isHuman(other) &&
+      final strongerPartner =
           snapshot.power[other] > snapshot.power[owner] * 1.25;
-      if (!strongerHuman) {
+      {
         plans.add(
           DiplomacyPlan(
             other: other,
@@ -563,7 +668,7 @@ class StrategicDiplomacyAi {
           ),
         );
       }
-      if (strongerHuman &&
+      if (strongerPartner &&
           tier >= 1 &&
           spare >= 15 &&
           (snapshot.touches(owner, other) || threat != null)) {
@@ -652,11 +757,19 @@ class StrategicDiplomacyAi {
             type: DiplomacyExchangeType.lands,
             tiles: [index],
           );
-          final base = engine.diplomacyLandPrice(index);
-          // A distressed seller values liquidity; a secure seller holds out.
-          final price = (base * (snapshot.distressed(seller) ? .9 : 1.15))
-              .round();
-          if (snapshot.spare(buyer, horizon) < price) continue;
+          // Quote inside the overlap of both reservation prices. A solvent
+          // seller does not sell below its actual strategic holding value.
+          final minimum =
+              (_landValue(seller, seller, land) /
+                      (snapshot.distressed(seller) ? 1.25 : 1))
+                  .ceil() +
+              1;
+          final maximum = math.min(
+            snapshot.spare(buyer, horizon),
+            _landValue(buyer, seller, land).floor() - 1,
+          );
+          if (maximum < minimum || maximum < 1) continue;
+          final price = math.max(1, (minimum + maximum) ~/ 2);
           plans.add(
             DiplomacyPlan(
               other: other,
@@ -740,13 +853,36 @@ class StrategicDiplomacyAi {
                 (engine.areEnemies(owner, p) ? 20 : 0) +
                 (_sharedThreat(owner, p) != null ? 20 : 0) +
                 (snapshot.distressed(p) ? 5 : 0) +
-                engine.opinionOf(owner, p) * .1;
+                engine.opinionOf(owner, p) * .1 +
+                math.min(
+                      16,
+                      math.max(
+                        0,
+                        state.round -
+                            state.diplomacySocial.lastContact[owner][p],
+                      ),
+                    ) *
+                    .5;
             final result = priority(b).compareTo(priority(a));
             return result == 0 ? a.compareTo(b) : result;
           });
+    final selected = candidates.take(candidateLimit).toList();
+    final human = candidates
+        .where(
+          (p) =>
+              state.isHuman(p) &&
+              (snapshot.touches(owner, p) ||
+                  engine.areEnemies(owner, p) ||
+                  _sharedThreat(owner, p) != null),
+        )
+        .firstOrNull;
+    if (human != null && !selected.contains(human)) {
+      selected[selected.length - 1] = human;
+    }
     DiplomacyPlan? best;
     var bestScore = 0.0;
-    for (final other in candidates.take(candidateLimit)) {
+    for (final other in selected) {
+      consideredPartners.add(other);
       for (final plan in plansFor(owner, other)) {
         if (evaluatedPlans >= 64) break;
         // Generated candidates already contain real board refs. Rank their
@@ -860,6 +996,13 @@ class StrategicDiplomacyAi {
     // obeys the same legality, treasury, inbox and bilateral cooldown limits.
     if (tier < 3 && (state.round + owner) % (tier < 2 ? 3 : 2) != 0) return;
     final plan = bestPlan(owner);
+    // A token trade must not repeatedly postpone a clearly favorable campaign.
+    // Preserve strategic pacts and recovery plans; only low-value trade competes.
+    if (tier >= 3 &&
+        (plan == null || plan.tactic == DiplomacyTactic.trade) &&
+        _considerWar(owner, minimumValue: 35)) {
+      return;
+    }
     if (plan != null && _send(owner, plan)) return;
     if (_investInRelations(owner)) return;
     _considerWar(owner);
@@ -952,14 +1095,14 @@ class StrategicDiplomacyAi {
     return false;
   }
 
-  void _considerWar(int owner) {
-    if (state.round < 4 || snapshot.distressed(owner)) return;
+  bool _considerWar(int owner, {double? minimumValue}) {
+    if (state.round < 4 || snapshot.distressed(owner)) return false;
     if ((state.round * 7 + owner * 3 + state.config.seed) %
             (tier >= 3 ? 2 : 6) !=
         0) {
-      return;
+      return false;
     }
-    var best = tier >= 3 ? 12.0 : 24.0;
+    var best = minimumValue ?? (tier >= 3 ? 12.0 : 24.0);
     int? target;
     for (final other in snapshot.alive) {
       final score = warValue(owner, other);
@@ -968,6 +1111,6 @@ class StrategicDiplomacyAi {
         target = other;
       }
     }
-    if (target != null) engine.declareWar(owner, target);
+    return target != null && engine.declareWar(owner, target);
   }
 }

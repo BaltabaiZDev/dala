@@ -450,7 +450,7 @@ void main() {
       final saved = EditorRepository.decodeStateJson(copy, rules: mod.rules)!;
       expect(saved.diplomacyProposals.single.rationale, proposal.rationale);
       expect(saved.diplomacySocial.relationship(0, 1), 50);
-    expect(lanProtocolVersion, 6);
+      expect(lanProtocolVersion, 6);
       expect(
         e.proposeExchange(
           from: 1,
@@ -660,6 +660,162 @@ void main() {
       GameAi(mod: mod, engine: e).takeTurn();
       await GameAi(mod: mod, engine: copy).takeTurnAsync();
       expect(jsonEncode(copy.state.toJson()), jsonEncode(e.state.toJson()));
+    },
+  );
+  test(
+    'long subsidies cannot be bought for the price of the first few turns',
+    () {
+      final e = engine();
+      DiplomacyTerm subsidy(int duration) => DiplomacyTerm(
+        fromSender: false,
+        offer: DiplomacyOffer(
+          type: DiplomacyExchangeType.subsidies,
+          amount: 5,
+          duration: duration,
+        ),
+      );
+      final ai = StrategicDiplomacyAi(e);
+      expect(
+        ai.utility(1, 0, 1, [money(true, 50), subsidy(6)]),
+        greaterThan(0),
+      );
+      expect(ai.utility(1, 0, 1, [money(true, 50), subsidy(20)]), lessThan(0));
+      expect(
+        ai.utility(1, 0, 1, [subsidy(20), money(true, 50)]),
+        ai.utility(1, 0, 1, [money(true, 50), subsidy(20)]),
+      );
+    },
+  );
+
+  test('an imported army is rejected when its upkeep cannot be funded', () {
+    final e = engine();
+    final index = e.state.provinces[0].tiles.last;
+    e.state.hexes[index].unit = GameUnit(strength: 4);
+    e.state.provinces[1].money = 12;
+    final gift = DiplomacyTerm(
+      fromSender: true,
+      offer: DiplomacyOffer(type: DiplomacyExchangeType.lands, tiles: [index]),
+    );
+    expect(e.exchangeValidationError(0, 1, [gift]), isNull);
+    expect(StrategicDiplomacyAi(e).utility(1, 0, 1, [gift]), lessThan(-1000));
+  });
+
+  test(
+    'farm sale and subsidy use the income remaining after the whole exchange',
+    () {
+      final e = engine();
+      final index = e.state.provinces[1].tiles.last;
+      e.state.hexes[index].object = TileObject.farm;
+      e.state.provinces[0].money = 1000;
+      final ai = StrategicDiplomacyAi(e);
+      final amount = ai.snapshot.net[1] ~/ 2;
+      final subsidy = DiplomacyTerm(
+        fromSender: false,
+        offer: DiplomacyOffer(
+          type: DiplomacyExchangeType.subsidies,
+          amount: amount,
+          duration: 1,
+        ),
+      );
+      final sale = DiplomacyTerm(
+        fromSender: false,
+        offer: DiplomacyOffer(
+          type: DiplomacyExchangeType.lands,
+          tiles: [index],
+        ),
+      );
+      expect(ai.utility(1, 0, 1, [money(true, 400), subsidy]), greaterThan(0));
+      expect(
+        ai.utility(1, 0, 1, [money(true, 400), subsidy, sale]),
+        lessThan(-1000),
+      );
+      expect(
+        ai.utility(1, 0, 1, [sale, money(true, 400), subsidy]),
+        lessThan(-1000),
+      );
+    },
+  );
+
+  test(
+    'subsidy renewal replaces the old commitment instead of double charging',
+    () {
+      final e = engine();
+      e.state.diplomacySubsidies.add(
+        DiplomacySubsidy(payer: 1, receiver: 0, amount: 10, turnsLeft: 4),
+      );
+      final renewal = DiplomacyTerm(
+        fromSender: false,
+        offer: DiplomacyOffer(
+          type: DiplomacyExchangeType.subsidies,
+          amount: 10,
+          duration: 4,
+        ),
+      );
+      expect(
+        StrategicDiplomacyAi(e).utility(1, 0, 1, [money(true, 5), renewal]),
+        greaterThan(0),
+      );
+    },
+  );
+
+  test(
+    'sustainable income changes war risk and a second major front blocks it',
+    () {
+      final e = engine(
+        strategicFixture(ownerAt: (q, r) => q >= 8 ? 2 : (r < 2 ? 0 : 1)),
+      );
+      final funded = StrategicDiplomacyAi(e).warValue(1, 2);
+      for (final i in e.state.provinces[1].tiles.skip(1)) {
+        e.state.hexes[i].object = TileObject.pine;
+      }
+      final forest = StrategicDiplomacyAi(e).warValue(1, 2);
+      expect(funded, greaterThan(forest));
+      for (final i in e.state.provinces[0].tiles.skip(1)) {
+        e.state.hexes[i].unit = GameUnit(strength: 4);
+      }
+      expect(e.declareWar(0, 1), isTrue);
+      expect(StrategicDiplomacyAi(e).warValue(1, 2), lessThan(-1000));
+    },
+  );
+
+  test(
+    'stronger humans receive the same free beneficial pact candidates as bots',
+    () {
+      final e = engine(
+        strategicFixture(ownerAt: (q, r) => q >= 6 ? 2 : (r < 5 ? 0 : 1)),
+      );
+      final plans = StrategicDiplomacyAi(e).plansFor(1, 0);
+      expect(
+        plans.any(
+          (p) =>
+              p.tactic == DiplomacyTactic.secureBorder && p.terms.length == 1,
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'bounded partner search always considers a relevant human among many bots',
+    () {
+      final e = engine(
+        strategicFixture(
+          players: 8,
+          width: 21,
+          height: 8,
+          ownerAt: (q, r) => r < 2 ? 7 : q ~/ 3,
+        ),
+      );
+      for (var p = 1; p < 7; p++) {
+        trust(e, 7, p, 60);
+      }
+      final ai = StrategicDiplomacyAi(e)..bestPlan(7);
+      expect(ai.consideredPartners, contains(0));
+      expect(
+        ai.consideredPartners.length,
+        lessThanOrEqualTo(ai.candidateLimit),
+      );
+      expect(ai.evaluatedPlans, lessThanOrEqualTo(64));
     },
   );
 }

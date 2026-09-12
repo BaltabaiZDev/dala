@@ -1,3 +1,4 @@
+import 'lan_address.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -19,19 +20,24 @@ class _IoLanServer implements LanServerBackend {
   Stream<LanServerConnection> get connections => _connections.stream;
 
   @override
-  Future<LanServerBinding> start({int port = 7358}) async {
+  Future<LanServerBinding> start({int port = lanDefaultPort}) async {
     if (_server != null) {
       throw StateError('LAN сервері әлдеқашан ашық.');
     }
-    final server = await HttpServer.bind(
-      InternetAddress.anyIPv4,
-      port,
-      shared: true,
-    );
+    late final HttpServer server;
+    try {
+      server = await HttpServer.bind(
+        InternetAddress.anyIPv4,
+        port,
+        shared: false,
+      );
+    } on SocketException {
+      throw LanPortUnavailable(port);
+    }
     _server = server;
     server.listen(_handleRequest, onError: (_) {});
 
-    final addresses = <String>{'127.0.0.1'};
+    final addresses = <LanInterfaceAddress>[];
     try {
       final interfaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4,
@@ -40,7 +46,7 @@ class _IoLanServer implements LanServerBackend {
       for (final interface in interfaces) {
         for (final address in interface.addresses) {
           if (!address.isLoopback && address.address.isNotEmpty) {
-            addresses.add(address.address);
+            addresses.add(LanInterfaceAddress(address.address, interface.name));
           }
         }
       }
@@ -48,7 +54,7 @@ class _IoLanServer implements LanServerBackend {
       // Loopback remains available for tests and same-device play.
     }
     return LanServerBinding(
-      addresses: addresses.toList()..sort(),
+      addresses: rankedLanAddresses(addresses),
       port: server.port,
     );
   }

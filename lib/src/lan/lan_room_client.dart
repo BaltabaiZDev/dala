@@ -1,3 +1,4 @@
+import 'lan_address.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -84,7 +85,7 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
     error = null;
     _refresh();
     try {
-      final uri = _normalizeAddress(_address);
+      final uri = lanAddressUri(_address);
       final channel = WebSocketChannel.connect(uri);
       _channel = channel;
       await channel.ready.timeout(const Duration(seconds: 6));
@@ -471,22 +472,6 @@ class LanRoomClient extends ChangeNotifier implements GameNetworkDelegate {
   void dispose() {
     unawaited(close());
     super.dispose();
-  }
-
-  static Uri _normalizeAddress(String raw) {
-    var value = raw.trim();
-    if (value.isEmpty) throw const FormatException('Хост IP бос.');
-    if (!value.contains('://')) value = 'ws://$value';
-    final uri = Uri.parse(value);
-    final port = uri.hasPort ? uri.port : lanDefaultPort;
-    if (uri.host.isEmpty) throw const FormatException('Хост IP жарамсыз.');
-    return uri.replace(
-      scheme: uri.scheme == 'wss' ? 'wss' : 'ws',
-      port: port,
-      path: '/ws',
-      query: null,
-      fragment: null,
-    );
   }
 
   static String _safeError(Object exception) => exception

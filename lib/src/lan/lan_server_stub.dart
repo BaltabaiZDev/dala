@@ -1,3 +1,4 @@
+import 'lan_address.dart';
 import 'dart:async';
 
 import 'lan_server_api.dart';
@@ -11,7 +12,7 @@ class _UnsupportedLanServer implements LanServerBackend {
   Stream<LanServerConnection> get connections => const Stream.empty();
 
   @override
-  Future<LanServerBinding> start({int port = 7358}) => Future.error(
+  Future<LanServerBinding> start({int port = lanDefaultPort}) => Future.error(
     UnsupportedError(
       'Браузер LAN портын аша алмайды. Бөлмені Windows/Android қолданбасынан ашыңыз.',
     ),
