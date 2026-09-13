@@ -4,7 +4,7 @@ import 'game_mod.dart';
 GameMod createExampleMod(GameMod base) {
   final raw = base.toJson()
     ..['id'] = 'my_dala_mod'
-    ..['version'] = 2
+    ..['version'] = 3
     ..['name'] = 'Дала технологиялары'
     ..['title'] = 'DALA'
     ..['author'] = 'Мод авторы'
@@ -13,6 +13,7 @@ GameMod createExampleMod(GameMod base) {
     ..['buildings'] = [
       const ModBuilding(
         id: 'my_dala_mod.radar',
+        template: ModBuildingTemplate.radar,
         name: 'Радар',
         price: 30,
         upkeep: 2,
@@ -21,6 +22,7 @@ GameMod createExampleMod(GameMod base) {
       ).toJson(),
       const ModBuilding(
         id: 'my_dala_mod.airfield',
+        template: ModBuildingTemplate.airfield,
         name: 'Аэродром',
         price: 50,
         upkeep: 2,
@@ -44,6 +46,7 @@ GameMod createExampleMod(GameMod base) {
       ).toJson(),
       const ModBuilding(
         id: 'my_dala_mod.barracks',
+        template: ModBuildingTemplate.barracks,
         name: 'Казарма',
         price: 25,
         upkeep: 1,

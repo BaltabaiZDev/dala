@@ -5,6 +5,7 @@ import 'package:antiyoy_self/src/game/models.dart';
 import 'package:antiyoy_self/src/modding/game_mod.dart';
 import 'package:antiyoy_self/src/persistence/save_repository.dart';
 import 'package:antiyoy_self/src/ui/diplomacy_sheet.dart';
+import 'package:antiyoy_self/src/ui/diplomacy_route.dart';
 import 'package:antiyoy_self/src/ui/hex_board.dart';
 import 'package:antiyoy_self/src/ui/game_screen.dart';
 import 'package:antiyoy_self/src/ui/map_viewport.dart';
@@ -26,6 +27,121 @@ void main() {
       'Dala Sans',
     )..addFont(rootBundle.load('assets/dala/fonts/NotoSans.ttf'))).load();
   });
+  testWidgets(
+    'territory editing passes gestures to the board and restores the camera',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      final game = GameController(
+        mod: mod,
+        state: socialFixture(),
+        saves: SaveRepository(),
+        autosaveEnabled: false,
+      );
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        game.dispose();
+        await tester.binding.setSurfaceSize(null);
+      });
+      DiplomacyOffer? draft = const DiplomacyOffer(
+        type: DiplomacyExchangeType.lands,
+        tiles: [2],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: DalaTheme.light,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: Stack(
+              children: [
+                AnimatedBuilder(
+                  animation: game,
+                  builder: (_, _) => HexBoard(controller: game),
+                ),
+                Builder(
+                  builder: (context) => TextButton(
+                    onPressed: () => showDalaDiplomacyPanel(
+                      context,
+                      game,
+                      Center(
+                        child: TextButton(
+                          onPressed: () async {
+                            final selected = await game.beginTerritorySelection(
+                              giver: 0,
+                              offer: draft!,
+                            );
+                            if (selected != null) draft = selected;
+                          },
+                          child: const Text('Select land'),
+                        ),
+                      ),
+                    ),
+                    child: const Text('Diplomacy'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await waitForMapSprites(tester);
+      await tester.pumpAndSettle();
+      final board = tester.state(find.byType(HexBoard));
+      final view = tester.widget<MapViewport>(find.byType(MapViewport));
+      final original = Matrix4.copy(view.transformationController.value);
+      await tester.tap(find.text('Diplomacy'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Select land'));
+      await tester.pumpAndSettle();
+      final beforePan = Matrix4.copy(view.transformationController.value);
+      await tester.dragFrom(const Offset(195, 350), const Offset(35, 50));
+      await tester.pumpAndSettle();
+      expect(view.transformationController.value, isNot(beforePan));
+      final point = MatrixUtils.transformPoint(
+        view.transformationController.value,
+        HexBoard.centerOf(game.state.hexes[3]),
+      );
+      await tester.tapAt(point);
+      await tester.pump();
+      expect(game.territorySelection!.tiles, {2, 3});
+      await tester.tap(find.byKey(const ValueKey('territory-confirm')));
+      await tester.pumpAndSettle();
+      expect(draft!.tiles, [2, 3]);
+      expect(
+        game.state.hexes[3].owner,
+        0,
+        reason: 'Selecting never transfers ownership',
+      );
+      expect(tester.state(find.byType(HexBoard)), same(board));
+      expect(view.transformationController.value, original);
+      await tester.tap(find.text('Select land'));
+      await tester.pumpAndSettle();
+      game.toggleTerritoryTile(3);
+      await tester.pump();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(draft!.tiles, [
+        2,
+        3,
+      ], reason: 'Back discards the edit and keeps the draft');
+      expect(find.text('Select land'), findsOneWidget);
+      await tester.tap(find.text('Select land'));
+      await tester.pumpAndSettle();
+      game.state.turn = 1;
+      game.tapTile(6);
+      await tester.pumpAndSettle();
+      expect(
+        game.territorySelection,
+        isNull,
+        reason: 'A changed LAN turn cancels stale editing',
+      );
+      expect(draft!.tiles, [2, 3]);
+      expect(tester.takeException(), isNull);
+    },
+  );
   for (final width in [320.0, 390.0, 1280.0]) {
     testWidgets('field HUD keeps pause at the edge and map open at $width', (
       tester,
@@ -112,16 +228,31 @@ void main() {
       MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: DalaTheme.light,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
         home: Scaffold(
-          body: Builder(
-            builder: (context) => TextButton(
-              onPressed: () => showAntiyoyDiplomacyInbox(context, controller),
-              child: const Text('Inbox'),
-            ),
+          body: Stack(
+            children: [
+              AnimatedBuilder(
+                animation: controller,
+                builder: (context, _) => HexBoard(controller: controller),
+              ),
+              Builder(
+                builder: (context) => TextButton(
+                  onPressed: () =>
+                      showAntiyoyDiplomacyInbox(context, controller),
+                  child: const Text('Inbox'),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
+    await waitForMapSprites(tester);
+    final originalBoard = tester.state(find.byType(HexBoard));
     await tester.tap(find.text('Inbox'));
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('↓ Жер'));
@@ -135,25 +266,20 @@ void main() {
       await tester.tap(button);
       await tester.pumpAndSettle();
       await waitForMapSprites(tester);
-      expect(
-        find.byKey(const ValueKey('diplomacy-territory-preview')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('land-selection-confirm')),
-        findsNothing,
-      );
+      expect(find.byKey(const ValueKey('territory-cancel')), findsOneWidget);
+      expect(find.byKey(const ValueKey('territory-confirm')), findsNothing);
       final overlay =
           tester
                   .widgetList<CustomPaint>(find.byType(CustomPaint))
                   .firstWhere(
                     (w) =>
                         w.painter.runtimeType.toString() ==
-                        '_DiplomacyLandSelectionPainter',
+                        'HexTerritoryPainter',
                   )
                   .painter
               as dynamic;
-      expect(overlay.selected, tiles);
+      expect(overlay.tiles, tiles);
+      expect(tester.state(find.byType(HexBoard)), same(originalBoard));
       final viewport = tester.widget<MapViewport>(find.byType(MapViewport));
       final bounds = Offset.zero & tester.getSize(find.byType(MapViewport));
       for (final index in tiles) {
@@ -176,7 +302,7 @@ void main() {
           matchesGoldenFile('goldens/territory_preview_phone.png'),
         );
       }
-      await tester.tap(find.byKey(const ValueKey('land-selection-cancel')));
+      await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(
         find.byKey(const ValueKey('diplomacy-letter-page')),

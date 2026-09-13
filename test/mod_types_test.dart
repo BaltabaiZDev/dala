@@ -131,7 +131,7 @@ void main() {
   );
 
   test(
-    'radar and aircraft reveal across water and visibility follows treaties',
+    'radar and aircraft reveal across water and friendship never shares radar visibility',
     () {
       final engine = modFixture(mod);
       final state = engine.state;
@@ -166,7 +166,7 @@ void main() {
       engine.setDiplomacyStatus(0, 1, DiplomacyStatus.alliance);
       expect(
         modVisionTiles(state, mod, (p) => engine.areAllies(1, p)),
-        contains(site),
+        isNot(contains(site)),
       );
       engine.setDiplomacyStatus(0, 1, DiplomacyStatus.peace);
       expect(

@@ -1,11 +1,11 @@
 {
   "format": "dala-mod",
-  "version": 3,
+  "version": 4,
   "mod": {
     "id": "my_dala_mod",
     "name": "Дала технологиялары",
     "title": "DALA",
-    "version": 2,
+    "version": 3,
     "rules": {
       "unitMoveLimit": 4,
       "unitPricePerLevel": 10,
@@ -85,6 +85,7 @@
     "description": "Радар, аэродром және казарма. Әр ғимараттың production тізіміне өз әскеріңізді қосыңыз.",
     "buildings": [
       {
+        "template": "radar",
         "id": "my_dala_mod.radar",
         "name": "Радар",
         "price": 30,
@@ -95,6 +96,7 @@
         "icon": "radar"
       },
       {
+        "template": "airfield",
         "id": "my_dala_mod.airfield",
         "name": "Аэродром",
         "price": 50,
@@ -119,6 +121,7 @@
         "icon": "airfield"
       },
       {
+        "template": "barracks",
         "id": "my_dala_mod.barracks",
         "name": "Казарма",
         "price": 25,

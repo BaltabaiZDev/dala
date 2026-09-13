@@ -665,5 +665,20 @@
   "Сипаттама": "Részletek",
   "Орын жоқ": "Nincs hely",
   "Қазір қолжетімсіз": "Jelenleg nem elérhető",
-  "Ақша жетпейді": "Nincs elég pénz"
+  "Ақша жетпейді": "Nincs elég pénz",
+  "Шекарада тыныштық ұсынамыз.": "Tartsuk békén a határt.",
+  "Соғысты тоқтатайық.": "Vessünk véget a háborúnak.",
+  "Бағаны өзгертуді ұсынамыз.": "Eltérő árat ajánlunk.",
+  "Көмекке айырбас — достық.": "Segítség a barátságért cserébe.",
+  "Төлемге айырбас — достық.": "Fizetés a barátságért cserébe.",
+  "Ортақ жауға қарсы ұсыныс.": "Egy ajánlat közös ellenségünk ellen.",
+  "Өзара тиімді айырбас ұсынамыз.": "Tisztességes cserét javasolunk.",
+  "Келістік.": "Egyetértek.",
+  "Бұл соғысқа күшіміз жетпейді.": "Nem engedhetjük meg magunknak ezt a háborút.",
+  "Қазынамыз бұл шығынды көтермейді.": "Pénztárunk ezt a költséget nem tudja fedezni.",
+  "Тиімсіз ұсыныс. Бағаны қайта қарайық.": "Kedvezőtlen ajánlat. Tárgyaljunk újra.",
+  "Достықты тоқтатамыз. Өтемақы төленеді.": "Felmondjuk barátságunkat és kártérítést fizetünk.",
+  "Өтемақы: {0} × {1} ход = {2}.": "Kompenzáció: {0} × {1} játékkör = {2}.",
+  "Бағасы {0}": "Ár {0}",
+  "Соғыс → {0}": "Háború → {0}"
 }

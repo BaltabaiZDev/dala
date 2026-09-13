@@ -24,6 +24,7 @@ class EconomicBreakdown {
     required this.navalSupport,
     this.modIncome = 0,
     this.modUpkeep = 0,
+    this.aiBonus = 0,
   });
 
   final int land;
@@ -41,6 +42,7 @@ class EconomicBreakdown {
   final int navalSupport;
   final int modIncome;
   final int modUpkeep;
+  final int aiBonus;
 
   int get units => landUnits + cargoUnits;
 
@@ -59,9 +61,11 @@ class EconomicBreakdown {
       navalTransfer +
       navalSupport +
       modIncome +
-      modUpkeep;
+      modUpkeep +
+      aiBonus;
 
   EconomicBreakdown operator +(EconomicBreakdown other) => EconomicBreakdown(
+    aiBonus: aiBonus + other.aiBonus,
     land: land + other.land,
     farms: farms + other.farms,
     diplomacy: diplomacy + other.diplomacy,
@@ -150,16 +154,7 @@ enum SeaFortBuildBlock {
 class GameEngine {
   GameEngine({required this.mod, required this.state}) {
     validateModState();
-    // Legacy military treaties had no timer. Give them a finite grace period.
-    for (var a = 0; a < state.config.playerCount; a++) {
-      for (var b = a + 1; b < state.config.playerCount; b++) {
-        if (state.diplomacyRelations[a][b] == DiplomacyStatus.coalition &&
-            state.diplomacyAllianceTurns[a][b] <= 0) {
-          state.diplomacyAllianceTurns[a][b] = 12;
-          state.diplomacyAllianceTurns[b][a] = 12;
-        }
-      }
-    }
+    _removeLegacyMilitaryTreaties();
     for (final tile in state.hexes) {
       if (tile.unit != null) _normalizeUnitIdentity(tile.index);
     }
@@ -181,7 +176,6 @@ class GameEngine {
   final GameMod mod;
   final GameState state;
   final List<ArtilleryStrike> lastArtilleryStrikes = [];
-  bool _settlingCampaigns = false;
 
   Province? provinceAt(int tileIndex) {
     for (final province in state.provinces) {
@@ -328,39 +322,13 @@ class GameEngine {
 
   bool areFriends(int first, int second) =>
       first == second ||
-      diplomacyBetween(first, second) == DiplomacyStatus.alliance ||
-      hasMilitaryAccess(first, second);
+      diplomacyBetween(first, second) == DiplomacyStatus.alliance;
 
-  bool areAllies(int first, int second) => areFriends(first, second);
-
-  /// Returns the complete, deterministic military-alliance component. A-B
-  /// and B-C therefore grants A/C open borders and puts all three countries
-  /// on the same side of a war.
-  Set<int> militaryAllianceComponent(int owner) {
-    final alive = state.provinces.map((province) => province.owner).toSet();
-    if (owner < 0 ||
-        owner >= state.config.playerCount ||
-        !alive.contains(owner)) {
-      return <int>{};
-    }
-    if (!state.config.diplomacy) return {owner};
-    final reached = <int>{owner};
-    final queue = <int>[owner];
-    for (var cursor = 0; cursor < queue.length; cursor++) {
-      final current = queue[cursor];
-      for (var other = 0; other < state.config.playerCount; other++) {
-        if (reached.contains(other) || !alive.contains(other)) continue;
-        if (diplomacyBetween(current, other) == DiplomacyStatus.coalition) {
-          reached.add(other);
-          queue.add(other);
-        }
-      }
-    }
-    return reached;
-  }
-
-  bool hasMilitaryAccess(int first, int second) =>
-      first == second || militaryAllianceComponent(first).contains(second);
+  // Friendship is a bilateral non-aggression pact; vision and troops are sovereign.
+  bool areAllies(int first, int second) => first == second;
+  bool hasMilitaryAccess(int first, int second) => first == second;
+  Set<int> militaryAllianceComponent(int owner) =>
+      owner >= 0 && owner < state.config.playerCount ? {owner} : <int>{};
 
   void setDiplomacyStatus(int first, int second, DiplomacyStatus status) {
     if (!state.config.diplomacy ||
@@ -371,13 +339,14 @@ class GameEngine {
         second >= state.config.playerCount) {
       return;
     }
+    if (status == DiplomacyStatus.coalition) return;
     final previous = state.diplomacyRelations[first][second];
     state.diplomacyRelations[first][second] = status;
     state.diplomacyRelations[second][first] = status;
     if (previous != status) {
       final (delta, reason) = switch (status) {
         DiplomacyStatus.war => (-45, 'Соғыс басталды'),
-        DiplomacyStatus.coalition => (20, 'Әскери одақ құрылды'),
+        DiplomacyStatus.coalition => (0, ''),
         DiplomacyStatus.alliance when previous != DiplomacyStatus.coalition => (
           20,
           'Достық келісімі',
@@ -390,11 +359,7 @@ class GameEngine {
       };
       changeOpinion(first, second, delta, reason);
     }
-    if (status == DiplomacyStatus.coalition && previous != status) {
-      state.diplomacyAllianceTurns[first][second] = 12;
-      state.diplomacyAllianceTurns[second][first] = 12;
-    } else if (status != DiplomacyStatus.alliance &&
-        status != DiplomacyStatus.coalition) {
+    if (status != DiplomacyStatus.alliance) {
       state.diplomacyAllianceTurns[first][second] = 0;
       state.diplomacyAllianceTurns[second][first] = 0;
     }
@@ -556,15 +521,7 @@ class GameEngine {
     if (!_validDiplomacyPair(first, second)) return false;
     switch (diplomacyBetween(first, second)) {
       case DiplomacyStatus.coalition:
-        if (_allianceEdgeIsLocked(first, second)) return false;
-        setDiplomacyStatus(first, second, DiplomacyStatus.alliance);
-        changeOpinion(second, first, -35, 'Әскери одақтан шықты');
-        state.diplomacyAllianceTurns[first][second] = 12;
-        state.diplomacyAllianceTurns[second][first] = 12;
-        _logDiplomacy(
-          '${state.playerName(first)} және ${state.playerName(second)} әскери альянсты тоқтатты',
-        );
-        return true;
+        return false;
       case DiplomacyStatus.alliance:
         final turns = friendshipBreakCompensationTurns(first, second);
         final fine = friendshipBreakFinePerTurn(first);
@@ -589,74 +546,11 @@ class GameEngine {
     }
   }
 
-  bool canFormMilitaryAlliance(int first, int second) {
-    final relation = diplomacyBetween(first, second);
-    if (!_validDiplomacyPair(first, second) ||
-        (relation != DiplomacyStatus.peace &&
-            relation != DiplomacyStatus.alliance) ||
-        hasBlackMark(first, second)) {
-      return false;
-    }
-    final firstSide = militaryAllianceComponent(first);
-    final secondSide = militaryAllianceComponent(second);
-    // Campaign membership and contribution quotas are a fixed contract. A
-    // late ally must not acquire access without inheriting that contract's war.
-    if (_militaryCommitmentsPending({...firstSide, ...secondSide})) {
-      return false;
-    }
-    for (final a in firstSide) {
-      for (final b in secondSide) {
-        if (a != b && (areEnemies(a, b) || !canBecomeFriends(a, b))) {
-          return false;
-        }
-      }
-    }
-    return botAllianceAdmissionError(first, second) == null;
-  }
-
-  bool formMilitaryAlliance(int first, int second, {int duration = 12}) {
-    if (duration < 1 || duration > 20) return false;
-    if (_validDiplomacyPair(first, second) &&
-        diplomacyBetween(first, second) == DiplomacyStatus.coalition) {
-      return true;
-    }
-    if (!canFormMilitaryAlliance(first, second)) return false;
-    setDiplomacyStatus(first, second, DiplomacyStatus.coalition);
-    state.diplomacyAllianceTurns[first][second] = duration;
-    state.diplomacyAllianceTurns[second][first] = duration;
-    _removeDiplomacyProposalsBetween(first, second);
-    _logDiplomacy(
-      '${state.playerName(first)} және ${state.playerName(second)} әскери альянс құрды',
-    );
-    return true;
-  }
-
-  bool _allianceEdgeIsLocked(int first, int second) {
-    final component = militaryAllianceComponent(first);
-    if (!component.contains(second)) return false;
-    if (_militaryCommitmentsPending(component)) return true;
-    for (final tile in state.hexes) {
-      final unit = tile.unit;
-      if (unit == null) continue;
-      final owner = unitOwnerAt(tile.index);
-      if (owner != tile.owner &&
-          component.contains(owner) &&
-          component.contains(tile.owner)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  bool _militaryCommitmentsPending(Set<int> members) =>
-      state.campaigns.any(
-        (campaign) =>
-            campaign.sideA.any(members.contains) ||
-            campaign.sideB.any(members.contains),
-      ) ||
-      state.peaceConferences.any(
-        (conference) => conference.participants.any(members.contains),
-      );
+  // Old clients/saves may still name this removed offer. Never accept it.
+  bool canFormMilitaryAlliance(int first, int second) => false;
+  bool formMilitaryAlliance(int first, int second, {int duration = 12}) =>
+      false;
+  bool _allianceEdgeIsLocked(int first, int second) => false;
 
   bool proposeDiplomacy(int from, int to, DiplomacyProposalType type) {
     if (!_validDiplomacyPair(from, to)) return false;
@@ -833,99 +727,17 @@ class GameEngine {
   Iterable<DiplomacyMessage> incomingDiplomacyMessages(int player) =>
       state.diplomacyMessages.where((message) => message.to == player);
 
-  Iterable<PeaceConference> peaceConferencesFor(int player) => state
-      .peaceConferences
-      .where((conference) => conference.participants.contains(player));
-
-  PeaceConference? peaceConferenceById(int id) => state.peaceConferences
-      .where((conference) => conference.id == id)
-      .firstOrNull;
-
-  int peaceConferenceTileValue(int id, int tile) =>
-      peaceConferenceById(id)?.tileValues[tile] ?? 0;
-
-  int peaceConferenceQuota(int id, int player) =>
-      peaceConferenceById(id)?.contributionPoints[player] ?? 0;
-
-  int peaceConferenceAssignedValue(int id, int player) {
-    final conference = peaceConferenceById(id);
-    if (conference == null) return 0;
-    return (conference.allocations[player] ?? const <int>[]).fold<int>(
-      0,
-      (sum, tile) => sum + (conference.tileValues[tile] ?? 0),
-    );
-  }
-
+  Iterable<PeaceConference> peaceConferencesFor(int player) => const [];
+  PeaceConference? peaceConferenceById(int id) => null;
+  int peaceConferenceTileValue(int id, int tile) => 0;
+  int peaceConferenceQuota(int id, int player) => 0;
+  int peaceConferenceAssignedValue(int id, int player) => 0;
   bool submitPeaceConferenceProposal(
-    int id,
+    int conferenceId,
     int proposer,
     Map<int, List<int>> allocations,
-  ) {
-    final conference = peaceConferenceById(id);
-    if (conference == null ||
-        !conference.participants.contains(proposer) ||
-        !_isAlive(proposer)) {
-      return false;
-    }
-    final claimTiles = conference.claimTiles.toSet();
-    final assigned = <int>{};
-    final normalized = <int, List<int>>{};
-    for (final entry in allocations.entries) {
-      final recipient = entry.key;
-      if (!conference.participants.contains(recipient) ||
-          !_isAlive(recipient)) {
-        return false;
-      }
-      final tiles = entry.value.toSet().toList()..sort();
-      if (tiles.length != entry.value.length ||
-          tiles.any(
-            (tile) =>
-                !claimTiles.contains(tile) ||
-                !assigned.add(tile) ||
-                state.hexes[tile].coalitionClaim?.conferenceId != id,
-          )) {
-        return false;
-      }
-      final value = tiles.fold<int>(
-        0,
-        (sum, tile) => sum + (conference.tileValues[tile] ?? 0),
-      );
-      if (value > (conference.contributionPoints[recipient] ?? 0)) {
-        return false;
-      }
-      if (tiles.isNotEmpty) normalized[recipient] = tiles;
-    }
-    conference.allocations
-      ..clear()
-      ..addAll(normalized);
-    conference
-      ..proposer = proposer
-      ..revision = conference.revision + 1;
-    conference.acceptedBy
-      ..clear()
-      ..add(proposer);
-    _logDiplomacy(
-      '${state.playerName(proposer)} №$id бейбіт конференциясына жер бөлу ұсынысын жіберді',
-    );
-    _tryFinalizePeaceConference(conference);
-    return true;
-  }
-
-  bool acceptPeaceConference(int id, int player) {
-    final conference = peaceConferenceById(id);
-    if (conference == null ||
-        conference.proposer < 0 ||
-        !conference.participants.contains(player) ||
-        !_isAlive(player)) {
-      return false;
-    }
-    if (!conference.acceptedBy.contains(player)) {
-      conference.acceptedBy.add(player);
-      conference.acceptedBy.sort();
-    }
-    _tryFinalizePeaceConference(conference);
-    return true;
-  }
+  ) => false;
+  bool acceptPeaceConference(int id, int player) => false;
 
   bool hasDiplomacyInbox(int player) =>
       proposalsFor(player).isNotEmpty ||
@@ -994,64 +806,21 @@ class GameEngine {
       first < state.config.playerCount &&
       second < state.config.playerCount;
 
-  WarCampaign? campaignBetween(int first, int second) => state.campaigns
-      .where((campaign) => campaign.opposes(first, second))
-      .firstOrNull;
+  WarCampaign? campaignBetween(int first, int second) => null;
 
   bool declareWar(int attacker, int defender) {
     if (!canDeclareWar(attacker, defender)) return false;
-    final sideA = militaryAllianceComponent(attacker).toList()..sort();
-    final sideB = militaryAllianceComponent(defender).toList()..sort();
-    if (sideA.toSet().intersection(sideB.toSet()).isNotEmpty) return false;
-    // A peace-conference ban belongs to every participant pair. Checking the
-    // complete blocs here prevents an unblocked ally from dragging a banned
-    // country back into the same war indirectly.
-    for (final first in sideA) {
-      for (final second in sideB) {
-        if (diplomacyCooldown(first, second) > 0) return false;
-      }
-    }
-    for (final first in sideA) {
-      for (final second in sideB) {
-        setDiplomacyStatus(first, second, DiplomacyStatus.war);
-        state.diplomacyWarCooldowns[first][second] = 10;
-        state.diplomacyWarCooldowns[second][first] = 10;
-      }
-    }
-    state.campaigns.add(
-      WarCampaign(
-        id: state.nextWarCampaignId++,
-        attackerLeader: attacker,
-        defenderLeader: defender,
-        sideA: sideA,
-        sideB: sideB,
-        startedRound: state.round,
-      ),
+    setDiplomacyStatus(attacker, defender, DiplomacyStatus.war);
+    state.diplomacyWarCooldowns[attacker][defender] = 10;
+    state.diplomacyWarCooldowns[defender][attacker] = 10;
+    sendDiplomacyMessage(
+      from: attacker,
+      to: defender,
+      text: '${state.playerName(attacker)} соғыс жариялады',
     );
-    // A declaration of war is also a real inbox item, matching Classic's
-    // letter flow. Every directly attacked bloc member is informed; the
-    // defender always receives the first message.
-    for (final target in sideB) {
-      state.diplomacyMessages.add(
-        DiplomacyMessage(
-          from: attacker,
-          to: target,
-          text: '${state.playerName(attacker)} сізге соғыс жариялады',
-          createdRound: state.round,
-        ),
-      );
-    }
-    while (state.diplomacyMessages.length > 80) {
-      state.diplomacyMessages.removeAt(0);
-    }
-    // Ordinary friendship carries a diplomatic consequence, not automatic
-    // military participation. Only the military blocs join this campaign;
-    // a friendship must not bypass a third country's truce or its own bloc.
     for (var friend = 0; friend < state.config.playerCount; friend++) {
       if (friend == attacker ||
           friend == defender ||
-          sideA.contains(friend) ||
-          sideB.contains(friend) ||
           !_isAlive(friend) ||
           diplomacyBetween(defender, friend) != DiplomacyStatus.alliance) {
         continue;
@@ -1059,8 +828,7 @@ class GameEngine {
       _punishAggressorForDefenderFriend(attacker, friend);
     }
     _logDiplomacy(
-      '${state.playerName(attacker)} альянсы '
-      '${state.playerName(defender)} альянсына соғыс жариялады',
+      '${state.playerName(attacker)} → ${state.playerName(defender)}: соғыс',
     );
     return true;
   }
@@ -1091,223 +859,67 @@ class GameEngine {
     if (!_validDiplomacyPair(first, second) || !areEnemies(first, second)) {
       return false;
     }
-    final campaigns = state.campaigns
-        .where((campaign) => campaign.opposes(first, second))
-        .toList();
-    if (campaigns.isEmpty) {
-      setDiplomacyStatus(first, second, DiplomacyStatus.peace);
-      state.diplomacyWarCooldowns[first][second] = 9;
-      state.diplomacyWarCooldowns[second][first] = 9;
-    } else {
-      for (final campaign in campaigns) {
-        _openPeaceConferences(campaign);
-        _setCampaignPeace(campaign);
-        state.campaigns.remove(campaign);
-      }
-    }
+    setDiplomacyStatus(first, second, DiplomacyStatus.peace);
+    state.diplomacyWarCooldowns[first][second] = 9;
+    state.diplomacyWarCooldowns[second][first] = 9;
     _logDiplomacy(
-      '${state.playerName(first)} және ${state.playerName(second)} бітім жасады',
+      '${state.playerName(first)} ↔ ${state.playerName(second)}: бітім',
     );
     _updateWinner();
     return true;
   }
 
-  void _setCampaignPeace(WarCampaign campaign) {
-    for (final a in campaign.sideA) {
-      for (final b in campaign.sideB) {
-        if (!_validDiplomacyIndexes(a, b)) continue;
-        setDiplomacyStatus(a, b, DiplomacyStatus.peace);
-        state.diplomacyWarCooldowns[a][b] = 9;
-        state.diplomacyWarCooldowns[b][a] = 9;
+  /// Upgrade old matches once: keep existing ownership, settle unassigned
+  /// captured land to its recorded captor, and return foreign troops safely.
+  void _removeLegacyMilitaryTreaties() {
+    for (var a = 0; a < state.config.playerCount; a++) {
+      for (var b = 0; b < state.config.playerCount; b++) {
+        if (state.diplomacyRelations[a][b] != DiplomacyStatus.coalition) {
+          continue;
+        }
+        state.diplomacyRelations[a][b] = DiplomacyStatus.peace;
+        state.diplomacyAllianceTurns[a][b] = 0;
       }
     }
-  }
-
-  void _openPeaceConferences(WarCampaign campaign) {
-    final groups =
-        <({int originalOwner, bool capturedBySideA}), List<HexTile>>{};
+    state.diplomacyProposals.removeWhere(
+      (p) =>
+          p.type == DiplomacyProposalType.militaryAlliance ||
+          p.effectiveTerms.any(
+            (t) => t.offer.type == DiplomacyExchangeType.militaryAlliance,
+          ),
+    );
+    state.campaigns.clear();
+    state.peaceConferences.clear();
+    var landChanged = false;
+    final displaced = <({int source, GameUnit unit})>[];
     for (final tile in state.hexes) {
       final claim = tile.coalitionClaim;
-      if (claim == null ||
-          claim.campaignId != campaign.id ||
-          claim.conferenceId >= 0) {
-        continue;
-      }
-      final capturedBySideA = campaign.sideA.contains(claim.captor);
-      final capturedBySideB = campaign.sideB.contains(claim.captor);
-      if (!capturedBySideA && !capturedBySideB) continue;
-      groups
-          .putIfAbsent((
-            originalOwner: claim.originalOwner,
-            capturedBySideA: capturedBySideA,
-          ), () => <HexTile>[])
-          .add(tile);
-    }
-    final orderedGroups = groups.entries.toList()
-      ..sort((a, b) {
-        final ownerOrder = a.key.originalOwner.compareTo(b.key.originalOwner);
-        if (ownerOrder != 0) return ownerOrder;
-        return (a.key.capturedBySideA ? 0 : 1).compareTo(
-          b.key.capturedBySideA ? 0 : 1,
-        );
-      });
-    for (final group in orderedGroups) {
-      final side = group.key.capturedBySideA ? campaign.sideA : campaign.sideB;
-      final sideSet = side.toSet();
-      final tiles = group.value..sort((a, b) => a.index.compareTo(b.index));
-      final participants = <int>{};
-      final tileValues = <int, int>{};
-      final rawContributionPoints = <int, double>{};
-      for (final tile in tiles) {
-        final claim = tile.coalitionClaim!;
-        final contributors =
-            claim.contributors.where(sideSet.contains).toSet().toList()..sort();
-        if (!contributors.contains(claim.captor) &&
-            sideSet.contains(claim.captor)) {
-          contributors.add(claim.captor);
-          contributors.sort();
-        }
-        if (contributors.isEmpty) continue;
-        participants.addAll(contributors);
-        final value = math.max(1, claim.settlementValue);
-        tileValues[tile.index] = value;
-        final share = value / contributors.length;
-        for (final player in contributors) {
-          rawContributionPoints[player] =
-              (rawContributionPoints[player] ?? 0) + share;
-        }
-      }
-      if (participants.isEmpty || tileValues.isEmpty) continue;
-      final id = state.nextPeaceConferenceId++;
-      final participantList = participants.toList()..sort();
-      final claimTiles = tileValues.keys.toList()..sort();
-      // Apply largest-remainder rounding after the whole pool is known. Doing
-      // it claim-by-claim would give the lowest player every odd-dollar
-      // remainder and accumulate a systematic bias across many claims.
-      final contributionPoints = <int, int>{
-        for (final player in participantList)
-          player: (rawContributionPoints[player] ?? 0).floor(),
-      };
-      var remainder =
-          tileValues.values.fold<int>(0, (sum, value) => sum + value) -
-          contributionPoints.values.fold<int>(0, (sum, value) => sum + value);
-      final remainderOrder = participantList.toList()
-        ..sort((a, b) {
-          final fractionA =
-              (rawContributionPoints[a] ?? 0) -
-              (rawContributionPoints[a] ?? 0).floor();
-          final fractionB =
-              (rawContributionPoints[b] ?? 0) -
-              (rawContributionPoints[b] ?? 0).floor();
-          final fractionOrder = fractionB.compareTo(fractionA);
-          return fractionOrder != 0 ? fractionOrder : a.compareTo(b);
-        });
-      for (var i = 0; remainder > 0; i++, remainder--) {
-        final player = remainderOrder[i % remainderOrder.length];
-        contributionPoints[player] = contributionPoints[player]! + 1;
-      }
-      final conference = PeaceConference(
-        id: id,
-        sourceCampaignId: campaign.id,
-        originalOwner: group.key.originalOwner,
-        claimTiles: claimTiles,
-        participants: participantList,
-        openedRound: state.round,
-        deadlineRound: state.round + 5,
-        tileValues: tileValues,
-        contributionPoints: contributionPoints,
-      );
-      state.peaceConferences.add(conference);
-      for (final index in claimTiles) {
-        final claim = state.hexes[index].coalitionClaim;
-        if (claim != null) {
-          state.hexes[index].coalitionClaim = claim.copyWith(conferenceId: id);
-        }
-      }
-      _logDiplomacy(
-        '№$id бейбіт конференция ашылды: '
-        '${state.playerName(group.key.originalOwner)} ойыншысының ${claimTiles.length} жері',
-      );
-    }
-  }
-
-  void _tryFinalizePeaceConference(PeaceConference conference) {
-    if (!state.peaceConferences.contains(conference) ||
-        conference.proposer < 0) {
-      return;
-    }
-    final living = conference.participants.where(_isAlive).toList();
-    if (living.isEmpty ||
-        living.any((player) => !conference.acceptedBy.contains(player))) {
-      return;
-    }
-    _resolvePeaceConference(conference, useAllocation: true);
-  }
-
-  void _resolvePeaceConference(
-    PeaceConference conference, {
-    required bool useAllocation,
-  }) {
-    if (!state.peaceConferences.contains(conference)) return;
-    final recipients = <int, int>{};
-    if (useAllocation) {
-      for (final entry in conference.allocations.entries) {
-        for (final tile in entry.value) {
-          recipients[tile] = entry.key;
-        }
-      }
-    }
-    final displaced = <({int source, GameUnit unit})>[];
-    var changed = false;
-    for (final index in conference.claimTiles) {
-      if (index < 0 || index >= state.hexes.length) continue;
-      final tile = state.hexes[index];
-      final claim = tile.coalitionClaim;
-      if (claim == null || claim.conferenceId != conference.id) continue;
-      final assigned = recipients[index];
-      final recipient = assigned != null && _isAlive(assigned)
-          ? assigned
-          : claim.originalOwner;
       final unit = tile.unit;
-      if (unit != null && unit.owner < 0) unit.owner = claim.captor;
-      tile
-        ..owner = recipient
-        ..coalitionClaim = null;
-      if (unit != null &&
-          recipient != unit.owner &&
-          !hasMilitaryAccess(unit.owner, recipient)) {
+      if (unit != null && unit.owner < 0) {
+        unit.owner = claim?.captor ?? tile.owner;
+      }
+      if (claim != null) {
+        if (tile.owner < 0 &&
+            claim.captor >= 0 &&
+            claim.captor < state.config.playerCount) {
+          tile.owner = claim.captor;
+        }
+        tile.coalitionClaim = null;
+        landChanged = true;
+      }
+      unit?.transitAllies.clear();
+      if (unit != null && unit.owner != tile.owner) {
         tile.unit = null;
-        displaced.add((source: index, unit: unit));
+        displaced.add((source: tile.index, unit: unit));
       }
-      changed = true;
     }
+    if (landChanged) rebuildProvinces();
     for (final item in displaced) {
-      _repatriatePeaceConferenceUnit(item.source, item.unit);
+      _returnDisplacedUnit(item.source, item.unit);
     }
-    for (final participant in conference.participants) {
-      if (!_validDiplomacyIndexes(participant, conference.originalOwner) ||
-          participant == conference.originalOwner) {
-        continue;
-      }
-      state.diplomacyWarCooldowns[participant][conference.originalOwner] = math
-          .max(
-            10,
-            state.diplomacyWarCooldowns[participant][conference.originalOwner],
-          );
-      state.diplomacyWarCooldowns[conference.originalOwner][participant] =
-          state.diplomacyWarCooldowns[participant][conference.originalOwner];
-    }
-    state.peaceConferences.remove(conference);
-    if (changed) rebuildProvinces(preserveNewCapitalUnits: true);
-    _logDiplomacy(
-      useAllocation
-          ? '№${conference.id} бейбіт конференциясының жер бөлуі қабылданды'
-          : '№${conference.id} бейбіт конференциясы келісімсіз аяқталды; жер қайтарылды',
-    );
-    _updateWinner();
   }
 
-  void _repatriatePeaceConferenceUnit(int source, GameUnit unit) {
+  void _returnDisplacedUnit(int source, GameUnit unit) {
     final owner = unit.owner;
     if (owner < 0 || owner >= state.config.playerCount || !_isAlive(owner)) {
       return;
@@ -1381,26 +993,6 @@ class GameEngine {
         ..transitAllies.clear();
     }
     _fundUnitOnOwnLand(destination);
-  }
-
-  void _settleCampaignsWithDefeatedSide() {
-    if (_settlingCampaigns) return;
-    final ended = state.campaigns.where((campaign) {
-      final sideAAlive = campaign.sideA.any(_isAlive);
-      final sideBAlive = campaign.sideB.any(_isAlive);
-      return !sideAAlive || !sideBAlive;
-    }).toList();
-    if (ended.isEmpty) return;
-    _settlingCampaigns = true;
-    try {
-      for (final campaign in ended) {
-        _openPeaceConferences(campaign);
-        _setCampaignPeace(campaign);
-        state.campaigns.remove(campaign);
-      }
-    } finally {
-      _settlingCampaigns = false;
-    }
   }
 
   void _clearHostileObligations(int first, int second) {
@@ -1896,10 +1488,13 @@ class GameEngine {
       }
     }
     return EconomicBreakdown(
+      aiBonus: aiIncomeBonus(
+        province,
+        production: province.tiles.length + farms + trees + modIncome,
+      ),
       land: province.tiles.length,
       farms: farms,
-      // Friendship changes vision, combat and victory conditions; it does not
-      // mint free money. Antiyoy handles money transfers as explicit deals.
+      // Transfers are explicit contracts. Friendship never produces money.
       diplomacy: diplomacy,
       landUnits: landUnits,
       cargoUnits: cargoUnits,
@@ -1914,6 +1509,25 @@ class GameEngine {
       modIncome: modIncome,
       modUpkeep: modUpkeep,
     );
+  }
+
+  int aiIncomeBonus(Province province, {int? production}) {
+    if (state.isHuman(province.owner)) return 0;
+    final extraPercent = state.config.difficulty.incomePercent - 100;
+    if (extraPercent == 0) return 0;
+    final gross =
+        production ??
+        province.tiles.fold<int>(0, (sum, index) {
+          final tile = state.hexes[index];
+          return sum +
+              1 -
+              (tile.hasTree ? 1 : 0) +
+              (!state.config.slayRules && tile.object == TileObject.farm
+                  ? mod.rules.farmIncome
+                  : 0) +
+              (modBuildingAt(index)?.income ?? 0);
+        });
+    return math.max(0, gross) * extraPercent ~/ 100;
   }
 
   EconomicBreakdown playerEconomicBreakdown(int owner) => provincesOf(
@@ -1935,7 +1549,8 @@ class GameEngine {
         report.farms +
         report.trees +
         report.navalSupport +
-        report.modIncome;
+        report.modIncome +
+        report.aiBonus;
   }
 
   int _unitUpkeep(int strength) {
@@ -2267,51 +1882,18 @@ class GameEngine {
   }
 
   void _captureLand(HexTile target, GameUnit unit, int actor) {
-    final previousClaim = target.coalitionClaim;
-    final originalOwner = previousClaim?.originalOwner ?? target.owner;
-    final settlementValue =
-        previousClaim?.settlementValue ??
-        math.max(1, diplomacyLandPrice(target.index));
-    final campaign = campaignBetween(actor, originalOwner);
-    final actorSide = campaign == null
-        ? const <int>[]
-        : (campaign.sideA.contains(actor) ? campaign.sideA : campaign.sideB);
-    final contributors = <int>{actor};
-    if (campaign != null) {
-      contributors.addAll(
-        unit.transitAllies.where(
-          (ally) => ally != actor && actorSide.contains(ally),
-        ),
-      );
-    }
-    final contributorList = contributors.toList()..sort();
-    final joint = campaign != null && contributorList.length > 1;
-    unit.ready = false;
+    unit
+      ..ready = false
+      ..owner = actor
+      ..transitAllies.clear();
     target
       ..owner = actor
       ..object = TileObject.none
       ..treeBorn = -1
       ..artilleryAmmo = 0
       ..artilleryCooldown = 0
+      ..coalitionClaim = null
       ..unit = unit;
-    unit.owner = actor;
-    if (previousClaim != null && actor == previousClaim.originalOwner) {
-      target.coalitionClaim = null;
-      unit.transitAllies.clear();
-    } else if (joint) {
-      final members = actorSide.toSet().toList()..sort();
-      target.coalitionClaim = CoalitionClaim(
-        campaignId: campaign.id,
-        originalOwner: originalOwner,
-        members: members,
-        captor: actor,
-        contributors: contributorList,
-        settlementValue: settlementValue,
-      );
-    } else {
-      target.coalitionClaim = null;
-      unit.transitAllies.clear();
-    }
   }
 
   /// Classic hold-to-march behavior. Every ready unit in the province moves
@@ -3277,26 +2859,6 @@ class GameEngine {
     // A leaving seat cannot retain a veto or leave dangling claim references.
     // End its outstanding military contract and return its disputed pool
     // before neutralizing sovereign assets (ordinary conquests stay intact).
-    final ended = state.campaigns
-        .where(
-          (campaign) =>
-              campaign.sideA.contains(player) ||
-              campaign.sideB.contains(player),
-        )
-        .toList();
-    for (final campaign in ended) {
-      _openPeaceConferences(campaign);
-      _setCampaignPeace(campaign);
-      state.campaigns.remove(campaign);
-    }
-    final endedIds = ended.map((campaign) => campaign.id).toSet();
-    for (final conference in state.peaceConferences.toList()) {
-      if (conference.participants.contains(player) ||
-          conference.originalOwner == player ||
-          endedIds.contains(conference.sourceCampaignId)) {
-        _resolvePeaceConference(conference, useAllocation: false);
-      }
-    }
     var changed = false;
     final removedProvinceIds = state.provinces
         .where((province) => province.owner == player)
@@ -3398,12 +2960,16 @@ class GameEngine {
     _materializeOrphanedNavalCapitals();
     lastArtilleryStrikes.clear();
     final current = state.turn;
+    final order = state.turnOrder;
+    final currentPosition = order.indexOf(current);
+    var nextPosition = currentPosition;
     var next = current;
     for (var i = 0; i < state.config.playerCount; i++) {
-      next = (next + 1) % state.config.playerCount;
+      nextPosition = (nextPosition + 1) % order.length;
+      next = order[nextPosition];
       if (_isAlive(next)) break;
     }
-    final wrapped = next <= current;
+    final wrapped = nextPosition <= currentPosition;
     if (wrapped) {
       _advanceDiplomacyRound();
       // Settle the same pre-bankruptcy board for every province. Losing a
@@ -3526,40 +3092,9 @@ class GameEngine {
         }
         final alliance = state.diplomacyAllianceTurns[first][second];
         if (alliance <= 0) continue;
-        if (alliance == 1 &&
-            diplomacyBetween(first, second) == DiplomacyStatus.coalition &&
-            _militaryCommitmentsPending(militaryAllianceComponent(first))) {
-          // Campaign shares remain binding until the war/conference settles.
-          // Transit alone does not prolong a treaty: troops return on expiry.
-          continue;
-        }
         final next = alliance - 1;
         state.diplomacyAllianceTurns[first][second] = next;
         state.diplomacyAllianceTurns[second][first] = next;
-        if (next == 0 &&
-            diplomacyBetween(first, second) == DiplomacyStatus.coalition) {
-          setDiplomacyStatus(first, second, DiplomacyStatus.alliance);
-          state.diplomacyAllianceTurns[first][second] = 6;
-          state.diplomacyAllianceTurns[second][first] = 6;
-          final displaced = <({int source, GameUnit unit})>[];
-          for (final tile in state.hexes) {
-            final unit = tile.unit;
-            if (unit == null ||
-                unit.owner == tile.owner ||
-                hasMilitaryAccess(unit.owner, tile.owner)) {
-              continue;
-            }
-            tile.unit = null;
-            displaced.add((source: tile.index, unit: unit));
-          }
-          for (final item in displaced) {
-            _repatriatePeaceConferenceUnit(item.source, item.unit);
-          }
-          _logDiplomacy(
-            '${state.playerName(first)} және ${state.playerName(second)} әскери одағының мерзімі аяқталды; 6 ход достық сақталады',
-          );
-          continue;
-        }
         if (next == 0 &&
             diplomacyBetween(first, second) == DiplomacyStatus.alliance) {
           setDiplomacyStatus(first, second, DiplomacyStatus.peace);
@@ -3572,16 +3107,6 @@ class GameEngine {
     state.diplomacyProposals.removeWhere(
       (proposal) => state.round - proposal.createdRound >= 3,
     );
-    _advancePeaceConferences(state.round + 1);
-  }
-
-  void _advancePeaceConferences(int completedRound) {
-    final expired = state.peaceConferences
-        .where((conference) => completedRound >= conference.deadlineRound)
-        .toList();
-    for (final conference in expired) {
-      _resolvePeaceConference(conference, useAllocation: false);
-    }
   }
 
   void _resolveBankruptcy(Province province) {
@@ -4045,7 +3570,7 @@ class GameEngine {
     state.provinces = rebuilt;
     normalizeModAssets(successors: successorIdByOld);
     for (final displaced in displacedCapitalUnits) {
-      _repatriatePeaceConferenceUnit(displaced.source, displaced.unit);
+      _returnDisplacedUnit(displaced.source, displaced.unit);
     }
     _refreshNavalSupportLinks();
     final provinceTiles = rebuilt.expand((province) => province.tiles).toSet();
@@ -4438,7 +3963,6 @@ class GameEngine {
   bool _isAlive(int player) => state.provinces.any((p) => p.owner == player);
 
   void _updateWinner({bool commit = false}) {
-    _settleCampaignsWithDefeatedSide();
     normalizeModAssets();
     // A former owner may legally regain land when a conference resolves or
     // times out. Declaring a winner first would freeze endTurn and make that

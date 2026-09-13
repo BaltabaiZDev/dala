@@ -550,6 +550,7 @@ class _LanHostLobbyState extends State<_LanHostLobby> {
           : GameState.fromJson(widget.initialState!.toJson()),
     );
     if (!mounted) return;
+    initialState.randomizeTurnOrder();
     final entrySnapshot = GameState.fromJson(initialState.toJson());
     var activeState = initialState;
     var first = true;

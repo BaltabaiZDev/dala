@@ -96,7 +96,7 @@ class ContentPackage {
       final root = jsonDecode(utf8.decode(manifest.content));
       if (root is! Map ||
           root['format'] != 'dala-mod' ||
-          !const [1, 2, 3].contains(root['version']) ||
+          !const [1, 2, 3, 4].contains(root['version']) ||
           root['mod'] is! Map) {
         throw const FormatException('Бұл DALA мод пакеті емес.');
       }
@@ -154,7 +154,9 @@ class ContentPackage {
         utf8.encode(
           jsonEncode({
             'format': 'dala-mod',
-            'version': mod.buildings.values.any((b) => b.production.isNotEmpty)
+            'version': mod.buildings.values.any((b) => b.hasExplicitTemplate)
+                ? 4
+                : mod.buildings.values.any((b) => b.production.isNotEmpty)
                 ? 3
                 : mod.buildings.isEmpty && mod.units.isEmpty
                 ? 1

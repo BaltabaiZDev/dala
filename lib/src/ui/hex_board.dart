@@ -66,6 +66,44 @@ double _twoDimensionalScale(Matrix4 transform) => math.sqrt(
   math.pow(transform.entry(0, 0), 2) + math.pow(transform.entry(1, 0), 2),
 );
 
+class HexTerritoryPainter extends CustomPainter {
+  const HexTerritoryPainter({
+    required this.state,
+    required this.tiles,
+    required this.waterCells,
+  });
+  final GameState state;
+  final Set<int> tiles, waterCells;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final all = {
+      ...tiles,
+      for (final i in waterCells) ...state.waterCells[i].tiles,
+    };
+    for (final index in all) {
+      final tile = state.hexes[index];
+      final path = OrganicCells.around(HexBoard.centerOf(tile), inset: 3);
+      canvas.drawPath(
+        path,
+        Paint()..color = Colors.white.withValues(alpha: .28),
+      );
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(HexTerritoryPainter old) =>
+      old.state != state ||
+      !setEquals(old.tiles, tiles) ||
+      !setEquals(old.waterCells, waterCells);
+}
+
 class HexBoard extends StatefulWidget {
   const HexBoard({
     required this.controller,
@@ -254,6 +292,8 @@ class _HexBoardState extends State<HexBoard>
   ClassicSprites? _sprites;
   Size? _initialViewport;
   int? _focusedTurn;
+  TerritorySelection? _territorySession;
+  Matrix4? _beforeTerritoryView;
   final Map<int, Matrix4> _humanPlayerViews = {};
   int? _playedBattleSerial;
   int? _playedFortDestructionSerial;
@@ -352,8 +392,11 @@ class _HexBoardState extends State<HexBoard>
   @override
   Widget build(BuildContext context) {
     final state = widget.controller.viewState;
-    final targets = widget.controller.targetTiles;
-    final waterTargets = widget.controller.targetWaterCells;
+    final territory = widget.controller.territorySelection;
+    final targets = territory == null ? widget.controller.targetTiles : <int>{};
+    final waterTargets = territory == null
+        ? widget.controller.targetWaterCells
+        : <int>{};
     _maskCache.setActive(
       widget.controller.tool != PlayerTool.select ||
           targets.isNotEmpty ||
@@ -395,8 +438,20 @@ class _HexBoardState extends State<HexBoard>
       _pieceFrameState = state;
       _pieceFrameSignature = unitRenderSignature;
     }
-    final battle = widget.controller.boatBattleAnimation;
-    final fortDestruction = widget.controller.seaFortDestructionAnimation;
+    final rawBattle = widget.controller.boatBattleAnimation;
+    final battle =
+        rawBattle != null &&
+            visibleWaterCells.contains(rawBattle.fromWaterCell) &&
+            visibleWaterCells.contains(rawBattle.toWaterCell)
+        ? rawBattle
+        : null;
+    final rawFort = widget.controller.seaFortDestructionAnimation;
+    final fortDestruction =
+        rawFort != null &&
+            visibleWaterCells.contains(rawFort.fromWaterCell) &&
+            visibleWaterCells.contains(rawFort.toWaterCell)
+        ? rawFort
+        : null;
     if (battle != null && battle.serial != _playedBattleSerial) {
       _playedBattleSerial = battle.serial;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -439,6 +494,7 @@ class _HexBoardState extends State<HexBoard>
     return LayoutBuilder(
       builder: (context, constraints) {
         final viewport = constraints.biggest;
+        _syncTerritoryCamera(viewport, territory);
         _rasterViewport = viewport;
         _rasterPixelRatio = MediaQuery.devicePixelRatioOf(context);
         _syncRasterViewport();
@@ -559,6 +615,11 @@ class _HexBoardState extends State<HexBoard>
                                 state,
                               );
                               if (index == null) return;
+                              if (widget.controller.territorySelection !=
+                                  null) {
+                                widget.controller.toggleTerritoryTile(index);
+                                return;
+                              }
                               if (widget.controller.tapModTile(index)) return;
                               if (state.hexes[index].active) {
                                 final diplomacyPlayer = widget.controller
@@ -581,7 +642,7 @@ class _HexBoardState extends State<HexBoard>
                                 }
                               }
                             },
-                      onLongPressStart: widget.readOnly
+                      onLongPressStart: widget.readOnly || territory != null
                           ? null
                           : (details) {
                               final index = _nearestTile(
@@ -608,7 +669,7 @@ class _HexBoardState extends State<HexBoard>
                                 }
                               }
                             },
-                      onLongPressEnd: widget.readOnly
+                      onLongPressEnd: widget.readOnly || territory != null
                           ? null
                           : (_) => widget.controller.endLongPress(),
                       child: CustomPaint(
@@ -708,6 +769,17 @@ class _HexBoardState extends State<HexBoard>
                       },
                     ),
                   ),
+                  if (territory != null)
+                    IgnorePointer(
+                      child: CustomPaint(
+                        painter: HexTerritoryPainter(
+                          state: state,
+                          tiles: territory.tiles.intersection(visibleTiles),
+                          waterCells: widget.controller.territoryWaterSelection,
+                        ),
+                        size: boardSize,
+                      ),
+                    ),
                   if (battle != null)
                     IgnorePointer(
                       child: RepaintBoundary(
@@ -757,9 +829,10 @@ class _HexBoardState extends State<HexBoard>
                         ),
                       ),
                     ),
-                  if (widget.controller.tool != PlayerTool.select ||
-                      targets.isNotEmpty ||
-                      waterTargets.isNotEmpty)
+                  if (territory == null &&
+                      (widget.controller.tool != PlayerTool.select ||
+                          targets.isNotEmpty ||
+                          waterTargets.isNotEmpty))
                     IgnorePointer(
                       child: RepaintBoundary(
                         child: CustomPaint(
@@ -777,6 +850,8 @@ class _HexBoardState extends State<HexBoard>
                             state: state,
                             targets: targets,
                             waterTargets: waterTargets,
+                            visibleTiles: visibleTiles,
+                            visibleWaterCells: visibleWaterCells,
                             selected:
                                 widget.controller.selectedAirTile ??
                                 widget.controller.selectedTile,
@@ -792,6 +867,63 @@ class _HexBoardState extends State<HexBoard>
         );
       },
     );
+  }
+
+  void _syncTerritoryCamera(Size viewport, TerritorySelection? selection) {
+    if (identical(_territorySession, selection)) return;
+    _territorySession = selection;
+    final state = widget.controller.viewState;
+    final oldView = _beforeTerritoryView;
+    if (selection != null) {
+      _beforeTerritoryView ??= Matrix4.copy(_transformation.value);
+    } else {
+      _beforeTerritoryView = null;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !identical(_territorySession, selection)) return;
+      _cameraAnimation.stop();
+      if (selection == null) {
+        if (oldView != null) _transformation.value = oldView;
+        return;
+      }
+      final selected = {
+        ...selection.tiles,
+        for (final i in widget.controller.territoryWaterSelection)
+          ...state.waterCells[i].tiles,
+      };
+      final focus = selected.isNotEmpty
+          ? selected
+          : {
+              for (final tile in state.hexes)
+                if (tile.active &&
+                    tile.owner == selection.giver &&
+                    widget.controller.visibleTileIndices.contains(tile.index))
+                  tile.index,
+            };
+      if (focus.isEmpty) return;
+      final points = focus.map((i) => HexBoard.centerOf(state.hexes[i]));
+      final minX = points.map((p) => p.dx).reduce(math.min);
+      final maxX = points.map((p) => p.dx).reduce(math.max);
+      final minY = points.map((p) => p.dy).reduce(math.min);
+      final maxY = points.map((p) => p.dy).reduce(math.max);
+      final scale = math
+          .min(
+            viewport.width * .8 / (maxX - minX + 120),
+            viewport.height * .55 / (maxY - minY + 120),
+          )
+          .clamp(HexBoard.minimumScaleFor(viewport, state), 1.25);
+      _transformation.value = HexBoard.constrainTransform(
+        transform: Matrix4.diagonal3Values(scale, scale, 1)
+          ..setTranslationRaw(
+            viewport.width / 2 - (minX + maxX) / 2 * scale,
+            viewport.height * .46 - (minY + maxY) / 2 * scale,
+            0,
+          ),
+        viewport: viewport,
+        canvas: HexBoard.canvasSize(state),
+        minScale: HexBoard.minimumScaleFor(viewport, state),
+      );
+    });
   }
 
   void _handleTransformChanged() {
@@ -1183,6 +1315,8 @@ class HexActionMaskPainter extends CustomPainter {
     required this.state,
     required this.targets,
     required this.waterTargets,
+    this.visibleTiles,
+    this.visibleWaterCells,
     required this.selected,
     required this.selectedWater,
   }) : super(repaint: cache);
@@ -1192,6 +1326,8 @@ class HexActionMaskPainter extends CustomPainter {
   final GameState state;
   final Set<int> targets;
   final Set<int> waterTargets;
+  final Set<int>? visibleTiles;
+  final Set<int>? visibleWaterCells;
   final int? selected;
   final int? selectedWater;
 
@@ -1219,6 +1355,7 @@ class HexActionMaskPainter extends CustomPainter {
     final shadow = Paint()..color = const Color(0x66000000);
     for (final tile in state.hexes) {
       if (!tile.active ||
+          (visibleTiles != null && !visibleTiles!.contains(tile.index)) ||
           (bounds != null && !bounds.contains(HexBoard.centerOf(tile))) ||
           tile.index == selected ||
           targets.contains(tile.index)) {
@@ -1230,6 +1367,10 @@ class HexActionMaskPainter extends CustomPainter {
       );
     }
     for (final cell in state.waterCells) {
+      if (visibleWaterCells != null &&
+          !visibleWaterCells!.contains(cell.index)) {
+        continue;
+      }
       if (cell.index == selectedWater || waterTargets.contains(cell.index)) {
         continue;
       }

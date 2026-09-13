@@ -155,98 +155,6 @@ void main() {
     },
   );
 
-  test('bloc joining requires every pair and a higher threshold with size', () {
-    final e = engine(
-      strategicFixture(players: 5, width: 15, ownerAt: (q, r) => q ~/ 3),
-    );
-    expect(e.militaryAllianceTrustRequired(0, 1), 35);
-    trust(e, 0, 1, 35);
-    expect(e.formMilitaryAlliance(0, 1), isTrue);
-    expect(e.militaryAllianceTrustRequired(0, 2), 43);
-    trust(e, 0, 2, 80);
-    trust(e, 1, 2, 42);
-    expect(e.canFormMilitaryAlliance(0, 2), isFalse);
-    trust(e, 1, 2, 43);
-    expect(e.formMilitaryAlliance(0, 2), isTrue);
-    expect(e.militaryAllianceTrustRequired(0, 3), 51);
-    for (var p = 0; p < 3; p++) {
-      trust(e, p, 3, 80);
-    }
-    // The old 1 ↔ 2 pair is also part of the larger group's cohesion.
-    expect(e.canFormMilitaryAlliance(0, 3), isFalse);
-    trust(e, 1, 2, 60);
-    expect(e.canFormMilitaryAlliance(0, 3), isTrue);
-  });
-
-  test(
-    'human consent remains possible but bots never form an all-world bloc',
-    () {
-      final e = engine(strategicFixture(humans: 3));
-      trust(e, 0, 1, -80);
-      expect(e.formMilitaryAlliance(0, 1), isTrue);
-      expect(e.formMilitaryAlliance(0, 2), isTrue);
-      final bot = engine();
-      for (var a = 0; a < 3; a++) {
-        for (var b = a + 1; b < 3; b++) {
-          trust(bot, a, b, 90);
-        }
-      }
-      expect(bot.formMilitaryAlliance(0, 1), isTrue);
-      expect(bot.canFormMilitaryAlliance(0, 2), isFalse);
-      expect(bot.botAllianceAdmissionError(0, 2), contains('жеке жеңіс'));
-    },
-  );
-
-  test('stale alliance proposal cannot bypass another member relationship', () {
-    final e = engine(strategicFixture(players: 4, ownerAt: (q, r) => q ~/ 3));
-    for (var a = 0; a < 3; a++) {
-      for (var b = a + 1; b < 3; b++) {
-        trust(e, a, b, 60);
-      }
-    }
-    e.formMilitaryAlliance(0, 1);
-    expect(
-      e.proposeExchange(from: 0, to: 2, terms: [money(true, 15), alliance]),
-      isTrue,
-    );
-    trust(e, 1, 2, 20);
-    final before = jsonEncode(e.state.toJson());
-    expect(
-      e.resolveDiplomacyProposal(e.proposalsFor(2).single, accept: true),
-      isFalse,
-    );
-    expect(jsonEncode(e.state.toJson()), before);
-  });
-
-  test(
-    'common stronger neighbor yields a useful explained containment alliance',
-    () {
-      final e = engine();
-      trust(e, 0, 1, 50);
-      final ai = StrategicDiplomacyAi(e);
-      final plan = ai.bestPlan(1)!;
-      expect(plan.other, 0);
-      expect(plan.tactic, DiplomacyTactic.containLeader);
-      expect(plan.rationale, contains(e.state.playerName(2)));
-      expect(ai.utility(0, 1, 0, plan.terms), greaterThan(0));
-      expect(ai.utility(1, 1, 0, plan.terms), greaterThan(0));
-      expect(
-        e.proposeExchange(
-          from: 1,
-          to: 0,
-          terms: plan.terms,
-          rationale: plan.rationale,
-        ),
-        isTrue,
-      );
-      expect(
-        e.resolveDiplomacyProposal(e.proposalsFor(0).single, accept: true),
-        isTrue,
-      );
-      expect(e.hasMilitaryAccess(0, 1), isTrue);
-    },
-  );
-
   test('a third member bot can veto an otherwise useful military pact', () {
     final e = engine(strategicFixture(players: 4, ownerAt: (q, r) => q ~/ 3));
     for (var a = 0; a < 3; a++) {
@@ -443,14 +351,14 @@ void main() {
           jsonDecode(jsonEncode(e.state.toJson())) as Map<String, dynamic>;
       trust(e, 0, 1, 50);
       final ai = StrategicDiplomacyAi(e)..takeTurn(1);
-      expect(ai.chosenTactic, DiplomacyTactic.containLeader);
+      expect(ai.chosenTactic, DiplomacyTactic.secureBorder);
       final proposal = e.proposalsFor(0).single;
       expect(proposal.rationale, isNotEmpty);
       applyLanPatchToJson(copy, builder.build(e.state)!);
       final saved = EditorRepository.decodeStateJson(copy, rules: mod.rules)!;
       expect(saved.diplomacyProposals.single.rationale, proposal.rationale);
       expect(saved.diplomacySocial.relationship(0, 1), 50);
-      expect(lanProtocolVersion, 9);
+      expect(lanProtocolVersion, 10);
       expect(
         e.proposeExchange(
           from: 1,
@@ -554,7 +462,7 @@ void main() {
     expect(e.proposalsFor(1), isEmpty);
     expect(e.playerMoney(1), 100);
     expect(e.messagesBetween(0, 1).length, 1);
-    expect(e.messagesBetween(0, 1).single.text, contains('пайда'));
+    expect(e.messagesBetween(0, 1).single.text, contains('Тиімсіз'));
     e.proposeExchange(from: 0, to: 1, terms: [money(false, 90)]);
     StrategicDiplomacyAi(e).takeTurn(1);
     expect(e.messagesBetween(0, 1).length, 1);
@@ -632,24 +540,13 @@ void main() {
         isTrue,
       );
       expect(
-        e.messagesBetween(0, 1).any((m) => m.text.contains('мүдделер өзгерді')),
+        e
+            .messagesBetween(0, 1)
+            .any((m) => m.text.contains('Достықты тоқтатамыз')),
         isTrue,
       );
     },
   );
-
-  test('new military pact cannot be obtained by bribing one member only', () {
-    final e = engine(strategicFixture(players: 4, ownerAt: (q, r) => q ~/ 3));
-    trust(e, 0, 1, 60);
-    e.formMilitaryAlliance(0, 1);
-    trust(e, 0, 2, 80);
-    trust(e, 1, 2, 0);
-    expect(
-      e.proposeExchange(from: 2, to: 0, terms: [money(true, 100), alliance]),
-      isFalse,
-    );
-    expect(e.exchangeValidationError(2, 0, [alliance]), contains('+43'));
-  });
 
   test(
     'synchronous and yielding full AI produce identical diplomatic state',

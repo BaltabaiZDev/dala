@@ -665,5 +665,20 @@
   "Сипаттама": "Detail",
   "Орын жоқ": "Tidak ada tempat",
   "Қазір қолжетімсіз": "Saat ini tidak tersedia",
-  "Ақша жетпейді": "Uang tidak cukup"
+  "Ақша жетпейді": "Uang tidak cukup",
+  "Шекарада тыныштық ұсынамыз.": "Mari kita jaga perbatasan tetap damai.",
+  "Соғысты тоқтатайық.": "Mari kita akhiri perang.",
+  "Бағаны өзгертуді ұсынамыз.": "Kami mengusulkan harga yang berbeda.",
+  "Көмекке айырбас — достық.": "Bantuan sebagai imbalan persahabatan.",
+  "Төлемге айырбас — достық.": "Pembayaran sebagai imbalan persahabatan.",
+  "Ортақ жауға қарсы ұсыныс.": "Tawaran melawan musuh kita bersama.",
+  "Өзара тиімді айырбас ұсынамыз.": "Kami mengusulkan pertukaran yang adil.",
+  "Келістік.": "Setuju.",
+  "Бұл соғысқа күшіміз жетпейді.": "Kita tidak mampu menanggung perang ini.",
+  "Қазынамыз бұл шығынды көтермейді.": "Perbendaharaan kami tidak dapat menutupi biaya ini.",
+  "Тиімсіз ұсыныс. Бағаны қайта қарайық.": "Tawaran yang tidak menguntungkan. Mari kita bernegosiasi ulang.",
+  "Достықты тоқтатамыз. Өтемақы төленеді.": "Kami mengakhiri persahabatan kami dan akan membayar kompensasi.",
+  "Өтемақы: {0} × {1} ход = {2}.": "Kompensasi : Putaran permainan {0} × {1} = {2}.",
+  "Бағасы {0}": "Harga {0}",
+  "Соғыс → {0}": "Perang  → {0}"
 }

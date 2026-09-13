@@ -32,10 +32,10 @@ void main() {
               ),
             ),
           );
-          // Seed a military war as well as normal AI diplomacy, so the audit
+          // Seed independent wars as well as ordinary AI diplomacy, so the audit
           // exercises combat and shared borders from the first turn.
-          engine.setDiplomacyStatus(0, 1, DiplomacyStatus.coalition);
-          engine.setDiplomacyStatus(2, 3, DiplomacyStatus.coalition);
+          engine.setDiplomacyStatus(0, 1, DiplomacyStatus.alliance);
+          engine.setDiplomacyStatus(2, 3, DiplomacyStatus.alliance);
           expect(engine.declareWar(0, 2), isTrue);
           for (var turn = 0; turn < 60 && engine.state.winner == null; turn++) {
             GameAi(mod: mod, engine: engine).takeTurn();
@@ -218,7 +218,9 @@ void main() {
   });
 
   for (final slay in [false, true]) {
-    for (final relation in DiplomacyStatus.values) {
+    for (final relation in DiplomacyStatus.values.where(
+      (s) => s != DiplomacyStatus.coalition,
+    )) {
       for (final holding in ['province', 'orphan', 'bridgehead', 'claim']) {
         for (final action in ['march', 'recruit', 'land']) {
           test('$action / $holding / ${relation.name} / slay=$slay', () {
@@ -312,61 +314,60 @@ void main() {
     for (var attacker = 0; attacker < 3; attacker++) {
       for (var defender = 0; defender < 3; defender++) {
         if (attacker == defender) continue;
-        test('debt survives bloc=$bloc declaration=$attacker->$defender', () {
-          final state = _state([0, 0, 1, 1, 2, 2]);
-          var engine = GameEngine(mod: mod, state: state);
-          expect(engine.formMilitaryAlliance(bloc[0], bloc[1]), isTrue);
-          for (var payer = 0; payer < 3; payer++) {
-            for (var receiver = 0; receiver < 3; receiver++) {
-              if (payer != receiver) state.diplomacyDebts[payer][receiver] = 7;
-            }
-          }
-          final ownBloc = bloc.contains(attacker) && bloc.contains(defender);
-          expect(engine.canDeclareWar(attacker, defender), !ownBloc);
-          final before = jsonEncode(state.toJson());
-          expect(engine.declareWar(attacker, defender), !ownBloc);
-          if (ownBloc) {
-            expect(jsonEncode(state.toJson()), before);
-            return;
-          }
-          for (final debts in state.diplomacyDebts) {
-            expect(debts.where((debt) => debt == 7), hasLength(2));
-          }
-          engine = GameEngine(
-            mod: mod,
-            state: GameState.fromJson(state.toJson()),
-          );
-          _round(engine);
-          for (var payer = 0; payer < 3; payer++) {
-            for (var receiver = 0; receiver < 3; receiver++) {
-              if (payer == receiver) continue;
-              final atWar = engine.areEnemies(payer, receiver);
-              expect(
-                engine.state.diplomacyDebts[payer][receiver],
-                atWar ? 7 : 0,
-              );
-              final overview = DiplomacyOverview.fromState(
-                engine.state,
-                payer,
-                receiver,
-              );
-              if (atWar) {
-                expect(overview.obligations, hasLength(2));
-                expect(
-                  overview.obligations.first.description,
-                  contains('Бітімнен кейін'),
-                );
-                expect(engine.playerEconomicBreakdown(payer).diplomacy, 0);
+        test(
+          'debt survives removed bloc=$bloc declaration=$attacker->$defender',
+          () {
+            final state = _state([0, 0, 1, 1, 2, 2]);
+            var engine = GameEngine(mod: mod, state: state);
+            expect(engine.formMilitaryAlliance(bloc[0], bloc[1]), isFalse);
+            for (var payer = 0; payer < 3; payer++) {
+              for (var receiver = 0; receiver < 3; receiver++) {
+                if (payer != receiver) {
+                  state.diplomacyDebts[payer][receiver] = 7;
+                }
               }
             }
-          }
-          expect(engine.makePeace(attacker, defender), isTrue);
-          _round(engine);
-          expect(
-            engine.state.diplomacyDebts.expand((row) => row),
-            everyElement(0),
-          );
-        });
+            expect(engine.canDeclareWar(attacker, defender), isTrue);
+            expect(engine.declareWar(attacker, defender), isTrue);
+            for (final debts in state.diplomacyDebts) {
+              expect(debts.where((debt) => debt == 7), hasLength(2));
+            }
+            engine = GameEngine(
+              mod: mod,
+              state: GameState.fromJson(state.toJson()),
+            );
+            _round(engine);
+            for (var payer = 0; payer < 3; payer++) {
+              for (var receiver = 0; receiver < 3; receiver++) {
+                if (payer == receiver) continue;
+                final atWar = engine.areEnemies(payer, receiver);
+                expect(
+                  engine.state.diplomacyDebts[payer][receiver],
+                  atWar ? 7 : 0,
+                );
+                final overview = DiplomacyOverview.fromState(
+                  engine.state,
+                  payer,
+                  receiver,
+                );
+                if (atWar) {
+                  expect(overview.obligations, hasLength(2));
+                  expect(
+                    overview.obligations.first.description,
+                    contains('Бітімнен кейін'),
+                  );
+                  expect(engine.playerEconomicBreakdown(payer).diplomacy, 0);
+                }
+              }
+            }
+            expect(engine.makePeace(attacker, defender), isTrue);
+            _round(engine);
+            expect(
+              engine.state.diplomacyDebts.expand((row) => row),
+              everyElement(0),
+            );
+          },
+        );
       }
     }
   }
@@ -374,7 +375,7 @@ void main() {
   test('ordinary friendship cannot create an undeclared third-party war', () {
     final state = _state([0, 0, 1, 1, 2, 2, 3, 3]);
     final engine = GameEngine(mod: mod, state: state);
-    expect(engine.formMilitaryAlliance(2, 3), isTrue);
+    expect(engine.formMilitaryAlliance(2, 3), isFalse);
     engine.setDiplomacyStatus(1, 2, DiplomacyStatus.alliance);
     state.diplomacyWarCooldowns[0][2] = 6;
     state.diplomacyWarCooldowns[2][0] = 6;
@@ -382,13 +383,13 @@ void main() {
     expect(engine.areEnemies(0, 2), isFalse);
     expect(engine.areEnemies(0, 3), isFalse);
     expect(engine.diplomacyCooldown(0, 2), 6);
-    expect(state.campaigns.single.sideB, [1]);
+    expect(state.campaigns, isEmpty);
   });
 
   test('a host cannot buy upgrades for a visiting allied army', () {
     final state = _state([0, 0, 1, 1, 2, 2]);
     final engine = GameEngine(mod: mod, state: state);
-    expect(engine.formMilitaryAlliance(0, 1), isTrue);
+    expect(engine.formMilitaryAlliance(0, 1), isFalse);
     state.hexes[1].unit = GameUnit(strength: 1, owner: 1, homeProvinceId: 2);
     final before = jsonEncode(state.toJson());
     expect(engine.buyUnit(1, 1, 1), isFalse);
@@ -423,7 +424,9 @@ void main() {
     expect(engine.provinceAt(5), isNull);
   });
 
-  for (final relation in DiplomacyStatus.values) {
+  for (final relation in DiplomacyStatus.values.where(
+    (s) => s != DiplomacyStatus.coalition,
+  )) {
     for (final targetKind in ['boat', 'fort']) {
       test('sea attack $targetKind respects ${relation.name}', () {
         final state = _state([0, 0, 1, 1]);
@@ -454,13 +457,15 @@ void main() {
   }
 
   for (final travel in ['march', 'land']) {
-    test('$travel home from ally changes funding immediately', () {
+    test('$travel between own provinces changes funding immediately', () {
       final state = _state([0, 0, 1, 1, 0, 0, 2, 2]);
       final engine = GameEngine(mod: mod, state: state);
-      expect(engine.formMilitaryAlliance(0, 1), isTrue);
-      state.hexes[3].unit = GameUnit(strength: 1, owner: 0, homeProvinceId: 1);
+      expect(engine.formMilitaryAlliance(0, 1), isFalse);
+      state.hexes[1].unit = GameUnit(strength: 1, owner: 0, homeProvinceId: 1);
+      state.hexes[1].neighbors.add(5);
+      state.hexes[5].neighbors.add(1);
       if (travel == 'land') {
-        state.hexes[3].unit = null;
+        state.hexes[1].unit = null;
         state.waterCells[0].coastTiles.add(5);
         state.waterCells[0].boat = GameBoat(
           owner: 0,
@@ -470,7 +475,7 @@ void main() {
         );
       }
       final moved = travel == 'march'
-          ? engine.moveUnit(3, 5)
+          ? engine.moveUnit(1, 5)
           : engine.disembarkUnit(0, 0, 5);
       expect(moved, isTrue);
       expect(state.hexes[5].unit?.homeProvinceId, engine.provinceAt(5)!.id);
@@ -485,18 +490,18 @@ void main() {
     });
   }
 
-  test('boarding adopts ship funding before landing on allied territory', () {
+  test('boarding adopts ship funding but peace blocks foreign landing', () {
     final state = _state([0, 0, 1, 1, 0, 0, 2, 2]);
     final engine = GameEngine(mod: mod, state: state);
-    expect(engine.formMilitaryAlliance(0, 1), isTrue);
+    expect(engine.formMilitaryAlliance(0, 1), isFalse);
     state.hexes[5].unit = GameUnit(strength: 2, owner: 0, homeProvinceId: 3);
     final cell = state.waterCells[0]..coastTiles.addAll([3, 5]);
     cell.boat = GameBoat(owner: 0, level: 1, homeProvinceId: 1);
     expect(engine.boardUnit(5, 0), isTrue);
     expect(cell.boat!.cargo.single.homeProvinceId, 1);
     cell.boat!.cargo.single.ready = true;
-    expect(engine.disembarkUnit(0, 0, 3), isTrue);
-    expect(state.hexes[3].unit!.homeProvinceId, 1);
+    expect(engine.disembarkUnit(0, 0, 3), isFalse);
+    expect(cell.boat!.cargo.single.homeProvinceId, 1);
   });
 
   test(

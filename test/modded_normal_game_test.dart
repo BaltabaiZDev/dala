@@ -125,7 +125,9 @@ void main() {
           expected.fingerprint,
         );
 
-        final province = controller.engine.provincesOf(0).first;
+        final province = controller.engine
+            .provincesOf(controller.state.turn)
+            .first;
         controller.tapTile(province.capital);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 350));
@@ -158,6 +160,7 @@ void main() {
           province.money,
           money - technology.buildings['my_dala_mod.radar']!.price,
         );
+        final turnOrder = List<int>.of(controller.state.turnOrder);
         await tester.runAsync(() => saves.save(controller.state));
         await tester.pumpWidget(const SizedBox.shrink());
 
@@ -173,6 +176,7 @@ void main() {
         final resumed = tester
             .widget<GameScreen>(find.byType(GameScreen))
             .controller;
+        expect(resumed.state.turnOrder, turnOrder);
         expect(resumed.mod.buildings.keys, expected.buildings.keys);
         expect(resumed.mod.units.keys, expected.units.keys);
         expect(resumed.mod.palette.first, expected.palette[offset]);

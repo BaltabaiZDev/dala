@@ -587,6 +587,7 @@ class _GameScreenState extends State<GameScreen> {
     final rows = <(String, int)>[
       ('Жер', report.land),
       ('Ферма', report.farms),
+      if (report.aiBonus != 0) ('AI +', report.aiBonus),
       ('Дипломатия', report.diplomacy),
       ('Кеме-қала', report.navalSupport),
       ('Құрлық әскері', report.landUnits),
@@ -804,7 +805,8 @@ class _DiplomacyRow extends StatelessWidget {
               const SizedBox(height: 9),
               Row(
                 children: [
-                  if (status != DiplomacyStatus.coalition)
+                  if (status == DiplomacyStatus.war ||
+                      status == DiplomacyStatus.peace)
                     Expanded(
                       child: FilledButton.tonal(
                         onPressed:
@@ -817,23 +819,17 @@ class _DiplomacyRow extends StatelessWidget {
                               ? cooldown > 0
                                     ? 'Бітім: $cooldown ход'
                                     : 'Бітім ұсыну'
-                              : status == DiplomacyStatus.alliance
-                              ? 'Әскери одақ ұсыну'
                               : 'Достық ұсыну',
                         ),
                       ),
                     ),
-                  if (status != DiplomacyStatus.war &&
-                      status != DiplomacyStatus.coalition)
-                    const SizedBox(width: 8),
+                  if (status == DiplomacyStatus.peace) const SizedBox(width: 8),
                   if (status != DiplomacyStatus.war)
                     Expanded(
                       child: OutlinedButton(
                         onPressed: enabled ? onWorse : null,
                         child: GameText(
-                          status == DiplomacyStatus.coalition
-                              ? 'Әскери одақты тоқтату'
-                              : status == DiplomacyStatus.alliance
+                          status == DiplomacyStatus.alliance
                               ? 'Достықты тоқтату'
                               : 'Соғыс жариялау',
                         ),

@@ -163,6 +163,9 @@ class DiplomacyAiSnapshot {
       // Count the promised expense in full, but do not bank uncertain receipts.
       upkeep[contract.payer] += contract.amount;
     }
+    for (final province in state.provinces) {
+      income[province.owner] += engine.aiIncomeBonus(province);
+    }
     net = [for (var p = 0; p < n; p++) income[p] - upkeep[p]];
     for (var p = 0; p < n; p++) {
       power[p] += land[p] * .65 + math.min(cash[p], 150) * .12;
@@ -284,6 +287,13 @@ class StrategicDiplomacyAi {
     }
     if (snapshot.land[owner] * 2 > snapshot.totalLand) value -= 30;
     if (snapshot.alive.length == 2 && !snapshot.distressed(owner)) value -= 25;
+    if (tier >= 4 &&
+        snapshot.touches(owner, other) &&
+        snapshot.power[owner] > snapshot.power[other] * 1.25 &&
+        snapshot.net[owner] >= snapshot.net[other] &&
+        snapshot.freeBorders[owner] < 4) {
+      value -= 30;
+    }
     if (tier >= 3 &&
         snapshot.power[owner] > snapshot.power[other] * 1.7 &&
         snapshot.freeBorders[owner] == 0) {
@@ -373,6 +383,10 @@ class StrategicDiplomacyAi {
     var result =
         30 * (ours / theirs - 1) + math.min(20, snapshot.land[target]) * .7;
     if (snapshot.distressed(owner)) result -= 28;
+    if (tier >= 4) {
+      if (snapshot.freeBorders[owner] == 0) result += 12;
+      if (snapshot.net[owner] > snapshot.net[target] * 1.25) result += 8;
+    }
     if (engine.opinionOf(owner, target) >= 35) result -= 22;
     return result.clamp(-200, 100);
   }
@@ -636,26 +650,6 @@ class StrategicDiplomacyAi {
       return plans;
     }
     final threat = _sharedThreat(owner, other);
-    if (_blocConsents(owner, other)) {
-      plans.add(
-        DiplomacyPlan(
-          other: other,
-          tactic: threat == null
-              ? DiplomacyTactic.coalition
-              : DiplomacyTactic.containLeader,
-          terms: [
-            give(
-              const DiplomacyOffer(
-                type: DiplomacyExchangeType.militaryAlliance,
-              ),
-            ),
-          ],
-          rationale: threat == null
-              ? 'Ортақ шекараны қауіпсіз етіп, сыртқа кеңейейік. Одақтағы әр елдің келісімі мен жеткілікті сенімі қажет.'
-              : '${state.playerName(threat)} күшейіп келеді. Күшімізді біріктірсек, оның басымдығын тежеп, өз жерімізді қорғай аламыз.',
-        ),
-      );
-    }
     if (relation == DiplomacyStatus.peace &&
         engine.canBecomeFriends(owner, other) &&
         engine.opinionOf(owner, other) >= -15) {
@@ -920,7 +914,15 @@ class StrategicDiplomacyAi {
       from: owner,
       to: plan.other,
       terms: plan.terms,
-      rationale: plan.rationale,
+      rationale: switch (plan.tactic) {
+        DiplomacyTactic.secureBorder => 'Шекарада тыныштық ұсынамыз.',
+        DiplomacyTactic.negotiatePeace => 'Соғысты тоқтатайық.',
+        DiplomacyTactic.counterOffer => 'Бағаны өзгертуді ұсынамыз.',
+        DiplomacyTactic.relief => 'Көмекке айырбас — достық.',
+        DiplomacyTactic.pressure => 'Төлемге айырбас — достық.',
+        DiplomacyTactic.recruitAgainstEnemy => 'Ортақ жауға қарсы ұсыныс.',
+        _ => 'Өзара тиімді айырбас ұсынамыз.',
+      },
     )) {
       return false;
     }
@@ -1010,8 +1012,8 @@ class StrategicDiplomacyAi {
     // A token trade must not repeatedly postpone a clearly favorable campaign.
     // Preserve strategic pacts and recovery plans; only low-value trade competes.
     if (tier >= 3 &&
-        (plan == null || plan.tactic == DiplomacyTactic.trade) &&
-        _considerWar(owner, minimumValue: 35)) {
+        (tier >= 4 || plan == null || plan.tactic == DiplomacyTactic.trade) &&
+        _considerWar(owner, minimumValue: tier >= 4 ? 22 : 35)) {
       return;
     }
     if (plan != null && _send(owner, plan)) return;
@@ -1034,21 +1036,13 @@ class StrategicDiplomacyAi {
     final types = terms.map((t) => t.offer.type).toSet();
     final String reason;
     if (accepted) {
-      reason =
-          'Келісеміз. Ұсынылған шарттар орындалды: бұл келісім қазіргі мүдделерімізге сай.';
-    } else if (types.contains(DiplomacyExchangeType.militaryAlliance)) {
-      reason =
-          engine.botAllianceAdmissionError(owner, proposal.from) ??
-          'Қатынасымыз жақсы болуы жеткіліксіз. Әр одақтасқа ортақ қауіп пен нақты пайда керек; қазір бұл одақ стратегиямызға сай емес.';
+      reason = 'Келістік.';
     } else if (types.contains(DiplomacyExchangeType.warDeclaration)) {
-      reason =
-          'Бұл соғысқа кірмейміз. Күш арақатынасы, қазіргі майдандар мен міндеттемелеріміз тәуекелді ақтамайды.';
+      reason = 'Бұл соғысқа күшіміз жетпейді.';
     } else if (snapshot.distressed(owner)) {
-      reason =
-          'Қазір қазына мен әскерді сақтап қалу маңызды. Шығынымызды азайтатын немесе қолма-қол көмек беретін шарт ұсыныңыз.';
+      reason = 'Қазынамыз бұл шығынды көтермейді.';
     } else {
-      reason =
-          'Бұл шарт бізге жеткілікті пайда бермейді. Бағаны, шекарадағы жерді немесе қауіпсіздік шартын өзгертсеңіз, қайта қараймыз.';
+      reason = 'Тиімсіз ұсыныс. Бағаны қайта қарайық.';
     }
     engine.sendDiplomacyMessage(from: owner, to: proposal.from, text: reason);
   }
@@ -1097,8 +1091,7 @@ class StrategicDiplomacyAi {
         engine.sendDiplomacyMessage(
           from: owner,
           to: other,
-          text:
-              'Біздің мүдделер өзгерді. Одақты тоқтатамыз; қолданыстағы бітім мен өтемақы міндеттерін орындаймыз.',
+          text: 'Достықты тоқтатамыз. Өтемақы төленеді.',
         );
         return true; // no instant betrayal + war in a single diplomatic action
       }
@@ -1107,10 +1100,13 @@ class StrategicDiplomacyAi {
   }
 
   bool _considerWar(int owner, {double? minimumValue}) {
-    if (state.round < 4 || snapshot.distressed(owner)) return false;
-    if ((state.round * 7 + owner * 3 + state.config.seed) %
-            (tier >= 3 ? 2 : 6) !=
-        0) {
+    if (state.round < (tier >= 4 ? 2 : 4) || snapshot.distressed(owner)) {
+      return false;
+    }
+    if (tier < 4 &&
+        (state.round * 7 + owner * 3 + state.config.seed) %
+                (tier >= 3 ? 2 : 6) !=
+            0) {
       return false;
     }
     var best = minimumValue ?? (tier >= 3 ? 12.0 : 24.0);

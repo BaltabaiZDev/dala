@@ -94,40 +94,10 @@ extension DiplomacyRules on GameEngine {
     if (social.events.length > 160) social.events.removeAt(0);
   }
 
-  /// Human-only alliances remain consensual. Every bot bloc member requires
-  /// a cohesive group, not merely a friendly relationship with the recruiter.
-  int militaryAllianceTrustRequired(int first, int second) {
-    final size = {
-      ...militaryAllianceComponent(first),
-      ...militaryAllianceComponent(second),
-    }.length;
-    return (35 + math.max(0, size - 2) * 8).clamp(35, 91);
-  }
-
-  String? botAllianceAdmissionError(int first, int second) {
-    final members = {
-      ...militaryAllianceComponent(first),
-      ...militaryAllianceComponent(second),
-    }.toList()..sort();
-    if (members.every(state.isHuman)) return null;
-    final alive = state.provinces.map((p) => p.owner).toSet();
-    if (alive.difference(members.toSet()).isEmpty) {
-      return 'Боттың мақсаты — жеке жеңіс: барлық елмен бір одаққа кірмейді';
-    }
-    final required = militaryAllianceTrustRequired(first, second);
-    for (var a = 0; a < members.length; a++) {
-      for (var b = a + 1; b < members.length; b++) {
-        if (opinionOf(members[a], members[b]) < required) {
-          return '${state.playerName(members[a])} ↔ ${state.playerName(members[b])}: қатынас кемінде +$required болуы керек';
-        }
-      }
-    }
-    return null;
-  }
-
-  bool botWantsMilitaryAlliance(int bot, int other) =>
-      canFormMilitaryAlliance(bot, other) &&
-      botAllianceAdmissionError(bot, other) == null;
+  int militaryAllianceTrustRequired(int first, int second) => 0;
+  String? botAllianceAdmissionError(int first, int second) =>
+      'Әскери одақ қолдау таппайды';
+  bool botWantsMilitaryAlliance(int bot, int other) => false;
 
   int opinionActionCooldown(int actor, int other) => math.max(
     state.diplomacySocial.actionCooldowns[actor][other],
@@ -210,19 +180,10 @@ extension DiplomacyRules on GameEngine {
     }
   }
 
-  bool canDeclareWar(int attacker, int defender) {
-    if (!_validDiplomacyPair(attacker, defender) ||
-        diplomacyBetween(attacker, defender) != DiplomacyStatus.peace ||
-        hasMilitaryAccess(attacker, defender)) {
-      return false;
-    }
-    final a = militaryAllianceComponent(attacker);
-    final b = militaryAllianceComponent(defender);
-    if (a.intersection(b).isNotEmpty) return false;
-    return !a.any(
-      (first) => b.any((second) => diplomacyCooldown(first, second) > 0),
-    );
-  }
+  bool canDeclareWar(int attacker, int defender) =>
+      _validDiplomacyPair(attacker, defender) &&
+      diplomacyBetween(attacker, defender) == DiplomacyStatus.peace &&
+      diplomacyCooldown(attacker, defender) == 0;
 
   /// Validate all conditions against the same pre-contract state. No item is
   /// applied on failure; split land rows cannot evade seller connectivity.

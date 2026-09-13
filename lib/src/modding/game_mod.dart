@@ -498,6 +498,13 @@ class GameMod {
           'Missing production building: ${unit.requiresBuilding}',
         );
       }
+      final producer = buildings[unit.requiresBuilding];
+      if ((producer != null && !producer.supportsUnit(unit)) ||
+          (producer == null && unit.movement == ModMovement.air)) {
+        throw FormatException(
+          '${unit.id}: aircraft require an airfield; land units require barracks or the legacy town.',
+        );
+      }
     }
     final allowedSprites = {
       ...spriteNames,

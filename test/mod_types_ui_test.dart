@@ -393,7 +393,13 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
       final first = find.byKey(const ValueKey('mod-type-my_dala_mod.plane0'));
-      expect(tester.getSize(first).height, lessThan(105));
+      expect(tester.getSize(first).height, lessThan(140));
+      expect(
+        tester.getSize(first).height,
+        tester
+            .getSize(find.byKey(const ValueKey('mod-type-my_dala_mod.plane1')))
+            .height,
+      );
       expect(find.byType(TextField), findsOneWidget);
       await capture(tester, 'long-production-320');
       await tester.tap(

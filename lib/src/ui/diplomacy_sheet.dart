@@ -8,12 +8,9 @@ import 'package:flutter/material.dart';
 import '../game/game_controller.dart';
 import '../game/game_engine.dart';
 import '../game/models.dart';
-import 'classic_assets.dart';
 import 'diplomacy_badge.dart';
 import 'diplomacy_overview.dart';
-import 'hex_board.dart';
-import 'organic_cells.dart';
-import 'map_viewport.dart';
+import 'diplomacy_route.dart';
 import 'top_snack_bar.dart';
 
 const _classicMoneyValues = <int>[
@@ -94,18 +91,10 @@ Future<void> showAntiyoyDiplomacy(
   int? initialPlayer,
 }) {
   final screenHeight = MediaQuery.sizeOf(context).height;
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    barrierColor: Colors.transparent,
-    backgroundColor: Colors.transparent,
-    constraints: BoxConstraints.tightFor(height: screenHeight * .50),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    clipBehavior: Clip.antiAlias,
-    builder: (_) => _DiplomacySheet(
+  return showDalaDiplomacyPanel(
+    context,
+    controller,
+    _DiplomacySheet(
       controller: controller,
       screenHeight: screenHeight,
       initialPlayer: initialPlayer,
@@ -116,22 +105,11 @@ Future<void> showAntiyoyDiplomacy(
 Future<void> showAntiyoyDiplomacyInbox(
   BuildContext context,
   GameController controller,
-) {
-  final screenHeight = MediaQuery.sizeOf(context).height;
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    barrierColor: Colors.transparent,
-    backgroundColor: DalaTheme.paper,
-    constraints: BoxConstraints.tightFor(height: screenHeight * .50),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    clipBehavior: Clip.antiAlias,
-    builder: (_) => _DiplomacyInboxSheet(controller: controller),
-  );
-}
+) => showDalaDiplomacyPanel(
+  context,
+  controller,
+  _DiplomacyInboxSheet(controller: controller),
+);
 
 class _DiplomacyInboxSheet extends StatefulWidget {
   const _DiplomacyInboxSheet({required this.controller});
@@ -142,44 +120,43 @@ class _DiplomacyInboxSheet extends StatefulWidget {
   State<_DiplomacyInboxSheet> createState() => _DiplomacyInboxSheetState();
 }
 
-enum _DiplomacyInboxPage { list, conferenceReview, conferenceCompose, letter }
+enum _DiplomacyInboxPage { list, letter }
 
 class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
   _DiplomacyInboxPage _page = _DiplomacyInboxPage.list;
   DiplomacyProposal? _selectedProposal;
   DiplomacyMessage? _selectedMessage;
-  int? _conferenceId;
-  Map<int, Set<int>> _allocationDraft = <int, Set<int>>{};
   bool _movingForward = true;
 
   GameController get controller => widget.controller;
-  int get current => controller.state.turn;
+  int get current => controller.visibilityPlayer;
+  @override
+  void initState() {
+    super.initState();
+    controller.addListener(_refresh);
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    controller.removeListener(_refresh);
+    super.dispose();
+  }
+
   List<DiplomacyProposal> get proposals =>
       controller.engine.proposalsFor(current).toList();
   List<DiplomacyMessage> get messages =>
       controller.engine.incomingDiplomacyMessages(current).toList();
-  List<PeaceConference> get conferences =>
-      controller.engine.peaceConferencesFor(current).toList()
-        ..sort((a, b) => a.id.compareTo(b.id));
-
-  PeaceConference? get selectedConference {
-    final id = _conferenceId;
-    return id == null ? null : controller.engine.peaceConferenceById(id);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final conference = selectedConference;
-    if ((_page == _DiplomacyInboxPage.conferenceReview ||
-            _page == _DiplomacyInboxPage.conferenceCompose) &&
-        conference == null) {
-      _page = _DiplomacyInboxPage.list;
-      _conferenceId = null;
-      _allocationDraft = <int, Set<int>>{};
-    }
+    final selectingTerritory = controller.territorySelection != null;
     return PopScope(
-      canPop: _page == _DiplomacyInboxPage.list,
+      canPop: selectingTerritory || _page == _DiplomacyInboxPage.list,
       onPopInvokedWithResult: (didPop, _) {
+        if (selectingTerritory) return;
         if (!didPop) _backInsideInbox();
       },
       child: Material(
@@ -206,12 +183,6 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
           child: switch (_page) {
             _DiplomacyInboxPage.list => _buildInboxList(),
             _DiplomacyInboxPage.letter => _buildLetter(),
-            _DiplomacyInboxPage.conferenceReview => _buildConferenceReview(
-              conference!,
-            ),
-            _DiplomacyInboxPage.conferenceCompose => _buildConferenceComposer(
-              conference!,
-            ),
           },
         ),
       ),
@@ -221,11 +192,7 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
   Widget _buildInboxList() {
     final incomingProposals = proposals;
     final incomingMessages = messages;
-    final pendingConferences = conferences;
-    final empty =
-        incomingProposals.isEmpty &&
-        incomingMessages.isEmpty &&
-        pendingConferences.isEmpty;
+    final empty = incomingProposals.isEmpty && incomingMessages.isEmpty;
     return Column(
       key: const ValueKey('diplomacy-inbox-list'),
       children: [
@@ -241,22 +208,6 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
               : ListView(
                   padding: EdgeInsets.zero,
                   children: [
-                    for (final conference in pendingConferences)
-                      _InboxRow(
-                        key: ValueKey(
-                          'peace-conference-inbox-${conference.id}',
-                        ),
-                        color:
-                            controller.mod.palette[conference
-                                    .participants
-                                    .first %
-                                controller.mod.palette.length],
-                        title: _peaceConferenceInboxLabel(
-                          controller,
-                          conference,
-                        ),
-                        onTap: () => _openConference(conference),
-                      ),
                     for (final proposal in incomingProposals)
                       _InboxRow(
                         color:
@@ -298,400 +249,10 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
   }
 
   void _backInsideInbox() {
+    if (controller.territorySelection != null) return;
     setState(() {
       _movingForward = false;
-      if (_page == _DiplomacyInboxPage.conferenceCompose) {
-        _page = _DiplomacyInboxPage.conferenceReview;
-      } else {
-        _page = _DiplomacyInboxPage.list;
-        _conferenceId = null;
-        _allocationDraft = <int, Set<int>>{};
-      }
-    });
-  }
-
-  void _openConference(PeaceConference conference) {
-    setState(() {
-      _conferenceId = conference.id;
-      _allocationDraft = <int, Set<int>>{};
-      _movingForward = true;
-      _page = _DiplomacyInboxPage.conferenceReview;
-    });
-  }
-
-  Widget _buildConferenceReview(PeaceConference conference) {
-    final totalPoints = conference.contributionPoints.values.fold<int>(
-      0,
-      (sum, value) => sum + value,
-    );
-    final allocated = conference.allocations.values
-        .expand((tiles) => tiles)
-        .toSet();
-    final unassigned = conference.claimTiles
-        .where((tile) => !allocated.contains(tile))
-        .toList();
-    final unassignedValue = unassigned.fold<int>(
-      0,
-      (sum, tile) =>
-          sum + controller.engine.peaceConferenceTileValue(conference.id, tile),
-    );
-    final remaining = math.max(
-      0,
-      conference.deadlineRound - controller.state.round,
-    );
-    final hasProposal = conference.proposer >= 0 && conference.revision > 0;
-    final alreadyAccepted = conference.acceptedBy.contains(current);
-    final enabled =
-        controller.isLocalHumanTurn && !controller.interactionsLocked;
-    return Column(
-      key: const ValueKey('peace-conference-review'),
-      children: [
-        _ClassicTitleBar(
-          title: 'Соғыстан кейінгі жер бөлісу',
-          onClose: _backInsideInbox,
-          height: 56,
-        ),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(10, 6, 10, 12),
-            children: [
-              Container(
-                color: DalaTheme.paper,
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GameText(
-                      '${controller.playerName(conference.originalOwner)} ойыншысының '
-                      '${conference.claimTiles.length} даулы жері',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    GameText(
-                      'Қалғаны: $remaining ход · Ұсыныс №${conference.revision}',
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                    if (!hasProposal)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 7),
-                        child: GameText(
-                          'Алғашқы жер бөлу ұсынысы әлі жасалмады.',
-                          style: TextStyle(fontSize: 15),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 6),
-              for (final player in conference.participants)
-                _buildConferenceParticipantRow(
-                  conference: conference,
-                  player: player,
-                  totalPoints: totalPoints,
-                  assignedValue: controller.engine.peaceConferenceAssignedValue(
-                    conference.id,
-                    player,
-                  ),
-                  accepted: conference.acceptedBy.contains(player),
-                ),
-              Container(
-                margin: const EdgeInsets.only(top: 4),
-                color: DalaTheme.line,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 9,
-                ),
-                child: Row(
-                  children: [
-                    const Expanded(
-                      child: GameText(
-                        'Бөлінбегені бұрынғы иесіне қайтады',
-                        style: TextStyle(fontSize: 15),
-                      ),
-                    ),
-                    GameText(
-                      '${unassigned.length} жер · $unassignedValue',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(
-          height: 54,
-          child: Row(
-            children: [
-              Expanded(
-                child: TextButton(
-                  key: const ValueKey('peace-conference-counter'),
-                  style: TextButton.styleFrom(
-                    backgroundColor: DalaTheme.gold,
-                    foregroundColor: Colors.black,
-                    shape: const RoundedRectangleBorder(),
-                  ),
-                  onPressed: enabled
-                      ? () => _startConferenceComposer(conference)
-                      : null,
-                  child: GameText(
-                    conference.proposer == current ? 'Өзгерту' : 'Қарсы ұсыныс',
-                    style: const TextStyle(fontSize: 18),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: FilledButton(
-                  key: const ValueKey('peace-conference-accept'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: DalaTheme.green,
-                    foregroundColor: Colors.black,
-                    disabledBackgroundColor: const Color(0xff8d9b90),
-                    shape: const RoundedRectangleBorder(),
-                  ),
-                  onPressed: enabled && hasProposal && !alreadyAccepted
-                      ? () => _acceptConference(conference)
-                      : null,
-                  child: GameText(
-                    alreadyAccepted ? 'Қабылданды' : 'Қабылдау',
-                    style: const TextStyle(fontSize: 18),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildConferenceParticipantRow({
-    required PeaceConference conference,
-    required int player,
-    required int totalPoints,
-    required int assignedValue,
-    required bool accepted,
-    VoidCallback? onTap,
-  }) {
-    final quota = controller.engine.peaceConferenceQuota(conference.id, player);
-    final percent = totalPoints <= 0 ? 0 : (quota * 100 / totalPoints).round();
-    return InkWell(
-      key: ValueKey('peace-allocation-row-$player'),
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 3),
-        color: controller.mod.palette[player % controller.mod.palette.length],
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  GameText(
-                    '${controller.playerName(player)} · $percent%',
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  GameText(
-                    'Бөлінді: $assignedValue / үлесі: $quota',
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                ],
-              ),
-            ),
-            if (accepted)
-              const Icon(Icons.check_circle, color: Color(0xff174d22))
-            else if (onTap != null)
-              const Icon(Icons.chevron_right),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _startConferenceComposer(PeaceConference conference) {
-    setState(() {
-      _allocationDraft = <int, Set<int>>{
-        for (final player in conference.participants)
-          player: (conference.allocations[player] ?? const <int>[]).toSet(),
-      };
-      _movingForward = true;
-      _page = _DiplomacyInboxPage.conferenceCompose;
-    });
-  }
-
-  Widget _buildConferenceComposer(PeaceConference conference) {
-    final totalPoints = conference.contributionPoints.values.fold<int>(
-      0,
-      (sum, value) => sum + value,
-    );
-    final assigned = _allocationDraft.values.expand((tiles) => tiles).toSet();
-    final unassigned = conference.claimTiles
-        .where((tile) => !assigned.contains(tile))
-        .toList();
-    final unassignedValue = unassigned.fold<int>(
-      0,
-      (sum, tile) =>
-          sum + controller.engine.peaceConferenceTileValue(conference.id, tile),
-    );
-    final enabled =
-        controller.isLocalHumanTurn && !controller.interactionsLocked;
-    return Column(
-      key: const ValueKey('peace-conference-compose'),
-      children: [
-        _ClassicTitleBar(
-          title: 'Жер үлесін ұсыну',
-          onClose: _backInsideInbox,
-          height: 56,
-        ),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(10, 7, 10, 12),
-            children: [
-              const Padding(
-                padding: EdgeInsets.only(bottom: 7),
-                child: GameText(
-                  'Ойыншыны басып, картадан оған берілетін даулы жерлерді таңдаңыз.',
-                  style: TextStyle(fontSize: 15),
-                ),
-              ),
-              for (final player in conference.participants)
-                _buildConferenceParticipantRow(
-                  conference: conference,
-                  player: player,
-                  totalPoints: totalPoints,
-                  assignedValue: _draftAssignedValue(conference, player),
-                  accepted: false,
-                  onTap: enabled
-                      ? () => _openPeaceAllocationPicker(conference, player)
-                      : null,
-                ),
-              Container(
-                color: DalaTheme.line,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 9,
-                ),
-                child: Row(
-                  children: [
-                    const Expanded(
-                      child: GameText(
-                        'Бұрынғы иесіне қайтарылады',
-                        style: TextStyle(fontSize: 15),
-                      ),
-                    ),
-                    GameText(
-                      '${unassigned.length} жер · $unassignedValue',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(
-          height: 52,
-          width: double.infinity,
-          child: FilledButton(
-            key: const ValueKey('peace-allocation-submit'),
-            style: FilledButton.styleFrom(
-              backgroundColor: DalaTheme.green,
-              foregroundColor: Colors.black,
-              shape: const RoundedRectangleBorder(),
-            ),
-            onPressed: enabled ? () => _submitConference(conference) : null,
-            child: const GameText('Ұсыну', style: TextStyle(fontSize: 18)),
-          ),
-        ),
-      ],
-    );
-  }
-
-  int _draftAssignedValue(PeaceConference conference, int player) =>
-      (_allocationDraft[player] ?? const <int>{}).fold<int>(
-        0,
-        (sum, tile) =>
-            sum +
-            controller.engine.peaceConferenceTileValue(conference.id, tile),
-      );
-
-  Map<int, int> _draftAllocationOwners() => <int, int>{
-    for (final entry in _allocationDraft.entries)
-      for (final tile in entry.value) tile: entry.key,
-  };
-
-  Future<void> _openPeaceAllocationPicker(
-    PeaceConference conference,
-    int recipient,
-  ) async {
-    final lockedTiles = <int>{
-      for (final entry in _allocationDraft.entries)
-        if (entry.key != recipient) ...entry.value,
-    };
-    final selection = await Navigator.of(context, rootNavigator: true)
-        .push<_TerritorySelectionResult>(
-          MaterialPageRoute<_TerritorySelectionResult>(
-            fullscreenDialog: true,
-            builder: (_) => _DiplomacyLandSelectionPage(
-              controller: controller,
-              giver: recipient,
-              initialTiles: (_allocationDraft[recipient] ?? const <int>{})
-                  .toList(),
-              initialNaval: const <NavalAssetRef>[],
-              conferenceId: conference.id,
-              conferenceRecipient: recipient,
-              lockedConferenceTiles: lockedTiles,
-              conferenceAllocations: _draftAllocationOwners(),
-            ),
-          ),
-        );
-    if (selection == null || !mounted) return;
-    setState(() {
-      _allocationDraft[recipient] = selection.tiles.toSet();
-    });
-  }
-
-  void _submitConference(PeaceConference conference) {
-    final allocations = <int, List<int>>{
-      for (final player in conference.participants)
-        player: (_allocationDraft[player] ?? const <int>{}).toList()..sort(),
-    };
-    final submitted = controller.submitPeaceConferenceProposal(
-      conferenceId: conference.id,
-      allocations: allocations,
-    );
-    if (!submitted) {
-      showTopSnackBar(context, 'Жер үлесі немесе таңдалған клеткалар жарамсыз');
-      return;
-    }
-    setState(() {
-      _movingForward = false;
-      _page = _DiplomacyInboxPage.conferenceReview;
-    });
-  }
-
-  void _acceptConference(PeaceConference conference) {
-    final accepted = controller.acceptPeaceConference(conference.id);
-    if (!accepted) {
-      showTopSnackBar(context, 'Бұл ұсынысты қазір қабылдауға болмайды');
-      return;
-    }
-    setState(() {
-      if (controller.engine.peaceConferenceById(conference.id) == null) {
-        _movingForward = false;
-        _page = _DiplomacyInboxPage.list;
-        _conferenceId = null;
-      }
+      _page = _DiplomacyInboxPage.list;
     });
   }
 
@@ -756,7 +317,7 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
                 else if (proposal == null)
                   GameText(
                     message!.text,
-                    translate: false,
+                    translate: !controller.state.isHuman(message.from),
                     style: const TextStyle(fontSize: 14),
                   ),
                 if (proposal != null)
@@ -851,7 +412,6 @@ class _DiplomacyInboxSheetState extends State<_DiplomacyInboxSheet> {
 
 class _InboxRow extends StatelessWidget {
   const _InboxRow({
-    super.key,
     required this.color,
     required this.title,
     required this.onTap,
@@ -886,13 +446,6 @@ String _inboxProposalLabel(DiplomacyProposal proposal) =>
           .map((t) => '${t.fromSender ? '↓' : '↑'} ${_offerName(t.offer.type)}')
           .join(' · ')
     : _proposalTitle(proposal);
-
-String _peaceConferenceInboxLabel(
-  GameController controller,
-  PeaceConference conference,
-) =>
-    'Жер бөлісу · ${controller.playerName(conference.originalOwner)} · '
-    '${conference.claimTiles.length} жер';
 
 class _DiplomacySheet extends StatefulWidget {
   const _DiplomacySheet({
@@ -951,10 +504,11 @@ class _DiplomacySheetState extends State<_DiplomacySheet> {
   @override
   Widget build(BuildContext context) {
     final screenHeight = widget.screenHeight;
+    final selectingTerritory = controller.territorySelection != null;
     return PopScope(
-      canPop: _page == _DiplomacyPanelPage.countries,
+      canPop: selectingTerritory || _page == _DiplomacyPanelPage.countries,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _showCountries();
+        if (!didPop && !selectingTerritory) _showCountries();
       },
       child: Container(
         key: const ValueKey('diplomacy-shell'),
@@ -1089,8 +643,6 @@ class _DiplomacySheetState extends State<_DiplomacySheet> {
             _ActionIcon(
               tooltip: status == DiplomacyStatus.alliance
                   ? 'Достықты тоқтату'
-                  : status == DiplomacyStatus.coalition
-                  ? 'Әскери одақты тоқтату'
                   : 'Соғыс жариялау',
               asset: 'assets/classic/diplomacy/dislike_icon.png',
               enabled:
@@ -1405,18 +957,11 @@ class _DiplomacySheetState extends State<_DiplomacySheet> {
         title: GameText(
           status == DiplomacyStatus.alliance
               ? 'Достықты тоқтату'
-              : status == DiplomacyStatus.coalition
-              ? 'Әскери одақты тоқтату'
               : 'Соғыс жариялау',
         ),
         content: GameText(
           status == DiplomacyStatus.alliance
-              ? 'Достықты шынымен тоқтатасыз ба? '
-                    '${controller.playerName(other)} ойыншысына $finePerTurn ақша × $fineTurns ход '
-                    '= $totalFine ақша өтем төлейсіз.'
-              : status == DiplomacyStatus.coalition
-              ? 'Әскери одақты тоқтатасыз ба? Белсенді ортақ соғыс немесе '
-                    'одақтас жерінде әскер тұрса, одақты бұзуға болмайды.'
+              ? 'Өтемақы: $finePerTurn × $fineTurns ход = $totalFine.'
               : '${controller.playerName(other)} ойыншысына шынымен соғыс жариялайсыз ба?',
         ),
         actions: [
@@ -1943,7 +1488,9 @@ class _MailPageState extends State<_MailPage> {
                                 const SizedBox(height: 3),
                                 GameText(
                                   message.text,
-                                  translate: false,
+                                  translate: !widget.controller.state.isHuman(
+                                    message.from,
+                                  ),
                                   style: const TextStyle(fontSize: 16),
                                 ),
                               ],
@@ -2105,23 +1652,6 @@ class _CountryInfoPage extends StatelessWidget {
                     style: const TextStyle(fontSize: 12),
                   ),
                   const SizedBox(height: 8),
-                  GameText(
-                    'Одаққа сенім: +${engine.militaryAllianceTrustRequired(current, other)} және ортақ пайда.',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  _DiplomacyDetails(
-                    children: [
-                      GameText(
-                        'Боттар одағы: барлық жұпта кемінде +${engine.militaryAllianceTrustRequired(current, other)}. '
-                        'Одақ үлкейген сайын талап өседі; сенімнен бөлек стратегиялық пайда да қажет.',
-                      ),
-                    ],
-                  ),
-                  if (relation == DiplomacyStatus.coalition)
-                    const GameText(
-                      'Одақ біткенде әскер өз еліне қайтады. Орын жоқ болса: біріктіру, болмаса құнын қайтару.',
-                      style: TextStyle(fontSize: 12),
-                    ),
                   const _SectionLabel('Қарыздар мен төлемдер'),
                   if (overview.obligations.isEmpty)
                     const GameText(
@@ -2258,7 +1788,7 @@ class _RelationRow extends StatelessWidget {
 }
 
 String _proposalTitle(DiplomacyProposal proposal) => switch (proposal.type) {
-  DiplomacyProposalType.exchange => 'Жаңа айырбас ұсынысы',
+  DiplomacyProposalType.exchange => 'Айырбас',
   DiplomacyProposalType.friendship => 'Достық ұсынысы',
   DiplomacyProposalType.militaryAlliance => 'Әскери одақ ұсынысы',
   DiplomacyProposalType.peace => 'Бітім ұсынысы',
@@ -2344,7 +1874,7 @@ String _offerSummary(
   int giver,
   int receiver,
   DiplomacyOffer offer, {
-  bool concise = false,
+  bool concise = true,
 }) {
   switch (offer.type) {
     case DiplomacyExchangeType.nothing:
@@ -2379,12 +1909,12 @@ String _offerSummary(
     case DiplomacyExchangeType.militaryAlliance:
       return '${offer.duration > 0 ? offer.duration : 12} ходтық әскери одақ';
     case DiplomacyExchangeType.warDeclaration:
-      return '${controller.playerName(offer.targetPlayer)} ойыншысына соғыс жариялау';
+      return 'Соғыс → ${controller.playerName(offer.targetPlayer)}';
     case DiplomacyExchangeType.ceasefire:
       if (concise) return 'Бітім · 9 ход соғыссыз';
       return '${controller.playerName(receiver)} ойыншысымен соғысты тоқтату және 9 ходтық тыйым';
     case DiplomacyExchangeType.removeBlackMark:
-      return '${controller.playerName(receiver)} ойыншысымен қара белгіні алу';
+      return 'Қара белгіні алу';
     case DiplomacyExchangeType.subsidies:
       final effective = math.min(
         offer.amount,
@@ -2640,13 +2170,9 @@ class _OfferEditorState extends State<_OfferEditor> {
                   widget.onChanged(offer.copyWith(duration: value.round())),
             ),
           ],
-          if (details &&
-              (offer.type == DiplomacyExchangeType.friendship ||
-                  offer.type == DiplomacyExchangeType.militaryAlliance)) ...[
+          if (details && offer.type == DiplomacyExchangeType.friendship) ...[
             _ValueLine(
-              label: offer.type == DiplomacyExchangeType.militaryAlliance
-                  ? 'Одақ мерзімі'
-                  : 'Достық мерзімі',
+              label: 'Достық мерзімі',
               value: '${offer.duration.clamp(1, 20)} ход',
             ),
             Slider(
@@ -2834,18 +2360,10 @@ class _LandPicker extends StatelessWidget {
       child: InkWell(
         key: ValueKey('land-map-picker-$giver'),
         onTap: () async {
-          final selection = await Navigator.of(context, rootNavigator: true)
-              .push<_TerritorySelectionResult>(
-                MaterialPageRoute<_TerritorySelectionResult>(
-                  fullscreenDialog: true,
-                  builder: (_) => _DiplomacyLandSelectionPage(
-                    controller: controller,
-                    giver: giver,
-                    initialTiles: offer.tiles,
-                    initialNaval: offer.navalRefs,
-                  ),
-                ),
-              );
+          final selection = await controller.beginTerritorySelection(
+            giver: giver,
+            offer: offer,
+          );
           if (selection != null && context.mounted) {
             onChanged(
               offer.copyWith(
@@ -2921,748 +2439,14 @@ class _TerritoryPreviewButton extends StatelessWidget {
         ),
       ],
     ),
-    onPressed: () => Navigator.of(context, rootNavigator: true).push<void>(
-      MaterialPageRoute(
-        builder: (_) => _DiplomacyLandSelectionPage(
-          controller: controller,
-          giver: giver,
-          initialTiles: offer.tiles,
-          initialNaval: offer.navalRefs,
-          readOnly: true,
-          previewTitle:
-              '${controller.playerName(giver)} → ${controller.playerName(receiver)}',
-        ),
-      ),
+    onPressed: () => controller.beginTerritorySelection(
+      giver: giver,
+      offer: offer,
+      readOnly: true,
+      title:
+          '${controller.playerName(giver)} → ${controller.playerName(receiver)}',
     ),
   );
-}
-
-class _TerritorySelectionResult {
-  const _TerritorySelectionResult({
-    required this.tiles,
-    required this.navalRefs,
-  });
-
-  final List<int> tiles;
-  final List<NavalAssetRef> navalRefs;
-}
-
-String _navalKey(NavalAssetRef reference) =>
-    '${reference.kind.name}:${reference.id}';
-
-class _DiplomacyLandSelectionPage extends StatefulWidget {
-  const _DiplomacyLandSelectionPage({
-    required this.controller,
-    required this.giver,
-    required this.initialTiles,
-    required this.initialNaval,
-    this.readOnly = false,
-    this.previewTitle,
-    this.conferenceId,
-    this.conferenceRecipient,
-    this.lockedConferenceTiles = const <int>{},
-    this.conferenceAllocations = const <int, int>{},
-  });
-
-  final GameController controller;
-  final int giver;
-  final List<int> initialTiles;
-  final List<NavalAssetRef> initialNaval;
-  final bool readOnly;
-  final String? previewTitle;
-  final int? conferenceId;
-  final int? conferenceRecipient;
-  final Set<int> lockedConferenceTiles;
-  final Map<int, int> conferenceAllocations;
-
-  @override
-  State<_DiplomacyLandSelectionPage> createState() =>
-      _DiplomacyLandSelectionPageState();
-}
-
-class _DiplomacyLandSelectionPageState
-    extends State<_DiplomacyLandSelectionPage>
-    with SingleTickerProviderStateMixin {
-  final TransformationController _transformation = TransformationController();
-  final Set<int> _selected = <int>{};
-  final Map<String, NavalAssetRef> _selectedNaval = <String, NavalAssetRef>{};
-  ClassicSprites? _sprites;
-  final HexTerrainCache _terrainCache = HexTerrainCache();
-  final MapPieceCullWindow _objectWindow = MapPieceCullWindow();
-  Size _mapViewport = Size.zero;
-  double _pixelRatio = 1;
-  Rect get _viewBounds => Rect.fromPoints(
-    _transformation.toScene(Offset.zero),
-    _transformation.toScene(_mapViewport.bottomRight(Offset.zero)),
-  );
-  void _syncCache() {
-    if (_mapViewport.isEmpty) return;
-    _terrainCache.setViewport(
-      _viewBounds,
-      _transformation.value.entry(0, 0) * _pixelRatio,
-    );
-  }
-
-  bool _cameraFitted = false;
-  late final AnimationController _priceAnimation;
-  Offset? _priceCenter;
-  int _price = 0;
-
-  GameController get controller => widget.controller;
-  bool get _conferenceMode => widget.conferenceId != null;
-
-  @override
-  void initState() {
-    super.initState();
-    _transformation.addListener(_syncCache);
-    _priceAnimation =
-        AnimationController(
-          vsync: this,
-          duration: const Duration(milliseconds: 850),
-        )..addListener(() {
-          if (mounted) setState(() {});
-        });
-    final visible = controller.visibleTileIndices;
-    if (widget.readOnly) {
-      _selected.addAll(
-        widget.initialTiles.where(
-          (i) =>
-              i >= 0 &&
-              i < controller.viewState.hexes.length &&
-              controller.viewState.hexes[i].inWorld,
-        ),
-      );
-      for (final reference in widget.initialNaval) {
-        _selectedNaval[_navalKey(reference)] = reference;
-      }
-    } else if (_conferenceMode) {
-      _selected.addAll(
-        widget.initialTiles.where(
-          (index) =>
-              !widget.lockedConferenceTiles.contains(index) &&
-              controller.canSelectPeaceConferenceTile(
-                conferenceId: widget.conferenceId!,
-                index: index,
-              ),
-        ),
-      );
-    } else {
-      _selected.addAll(
-        widget.initialTiles.where(
-          (index) =>
-              index >= 0 &&
-              index < controller.viewState.hexes.length &&
-              visible.contains(index) &&
-              controller.canSelectDiplomacyLandTile(
-                giver: widget.giver,
-                index: index,
-              ),
-        ),
-      );
-      for (final reference in widget.initialNaval) {
-        for (final cell in controller.viewState.waterCells) {
-          if (controller.canSelectDiplomacyNavalAsset(
-            giver: widget.giver,
-            waterCell: cell.index,
-            reference: reference,
-          )) {
-            _selectedNaval[_navalKey(reference)] = reference;
-            break;
-          }
-        }
-      }
-    }
-    ClassicSprites.load(
-      teamColors: controller.mod.palette,
-      overrides: controller.mod.sprites,
-    ).then((sprites) {
-      if (!mounted) {
-        sprites.dispose();
-        return;
-      }
-      setState(() => _sprites = sprites);
-    });
-  }
-
-  @override
-  void dispose() {
-    _transformation.removeListener(_syncCache);
-    _terrainCache.dispose();
-    _sprites?.dispose();
-    _priceAnimation.dispose();
-    _transformation.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final state = controller.viewState;
-    final boardSize = HexBoard.canvasSize(state);
-    final visibleTiles = controller.visibleTileIndices;
-    final visibleWater = controller.visibleWaterCellIndices;
-    _pixelRatio = MediaQuery.devicePixelRatioOf(context);
-    final mapPainter = HexBoardPainter(
-      terrainCache: _terrainCache,
-      terrainSignature: Object.hash(
-        identityHashCode(state),
-        identityHashCode(_sprites),
-      ),
-      state: state,
-      mod: controller.mod,
-      fogActive: controller.fogActive,
-      sprites: _sprites,
-      selected: null,
-      selectedWater: null,
-      selectionOpacity: 0,
-      moveTargets: const <int>{},
-      waterTargets: const <int>{},
-      defensePreviewTiles: const <int>{},
-      defensePreviewWaterCells: const <int>{},
-      defensePreviewOpacity: 0,
-      artilleryRangePreview: false,
-      artilleryVolleys: const [],
-      artilleryFireProgress: 0,
-      visibleTiles: visibleTiles,
-      visibleWaterCells: visibleWater,
-    );
-    return Scaffold(
-      key: ValueKey(
-        widget.readOnly
-            ? 'diplomacy-territory-preview'
-            : _conferenceMode
-            ? 'peace-allocation-picker-${widget.conferenceRecipient}'
-            : 'diplomacy-land-selection-page',
-      ),
-      backgroundColor: DalaTheme.deepWater,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              height: 72,
-              color: Colors.black.withValues(alpha: .78),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 76,
-                    child: IconButton(
-                      key: ValueKey(
-                        _conferenceMode
-                            ? 'peace-allocation-cancel'
-                            : 'land-selection-cancel',
-                      ),
-                      tooltip: context.trNullable(
-                        widget.readOnly ? 'Жабу' : 'Бас тарту',
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(
-                        Icons.close,
-                        color: Color(0xffef3838),
-                        size: 46,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: GameText(
-                      widget.previewTitle ??
-                          (_conferenceMode
-                              ? '${controller.playerName(widget.conferenceRecipient!)} ойыншысының жер үлесі'
-                              : 'Жер және теңіз активтері'),
-                      translate: widget.previewTitle == null,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white, fontSize: 24),
-                    ),
-                  ),
-                  if (!widget.readOnly)
-                    SizedBox(
-                      width: 76,
-                      child: IconButton(
-                        key: ValueKey(
-                          _conferenceMode
-                              ? 'peace-allocation-confirm'
-                              : 'land-selection-confirm',
-                        ),
-                        tooltip: context.trNullable('Таңдауды растау'),
-                        onPressed:
-                            !_conferenceMode &&
-                                _selected.isEmpty &&
-                                _selectedNaval.isEmpty
-                            ? null
-                            : () => Navigator.pop(
-                                context,
-                                _TerritorySelectionResult(
-                                  tiles: _selected.toList()..sort(),
-                                  navalRefs: _selectedNaval.values.toList()
-                                    ..sort((a, b) {
-                                      final byKind = a.kind.index.compareTo(
-                                        b.kind.index,
-                                      );
-                                      return byKind != 0
-                                          ? byKind
-                                          : a.id.compareTo(b.id);
-                                    }),
-                                ),
-                              ),
-                        icon: Icon(
-                          Icons.check,
-                          color:
-                              !_conferenceMode &&
-                                  _selected.isEmpty &&
-                                  _selectedNaval.isEmpty
-                              ? Colors.white24
-                              : const Color(0xff5fd66c),
-                          size: 46,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            if (widget.readOnly)
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: GameText(
-                  'Белгіленген жерлер ұсынысқа кіреді. Қарау келісімді қабылдамайды.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                ),
-              ),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  _mapViewport = constraints.biggest;
-                  _syncCache();
-                  if (!_cameraFitted) {
-                    _cameraFitted = true;
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) {
-                        _fitCamera(constraints.biggest, boardSize, state);
-                      }
-                    });
-                  }
-                  return MapViewport(
-                    transformationController: _transformation,
-                    canvasSize: boardSize,
-                    minScale: MapCameraBounds.fitScale(
-                      constraints.biggest,
-                      boardSize,
-                    ),
-                    maxScale: 2.8,
-                    child: SizedBox(
-                      width: boardSize.width,
-                      height: boardSize.height,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTapUp: widget.readOnly
-                            ? null
-                            : (details) => _toggleTile(
-                                _nearestTile(details.localPosition, state),
-                                visibleTiles,
-                                visibleWater,
-                              ),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            CustomPaint(
-                              willChange: state.hexes.length >= 1200,
-                              painter: mapPainter,
-                            ),
-                            if (state.hexes.length >= 1200)
-                              AnimatedBuilder(
-                                animation: _transformation,
-                                builder: (context, _) => CustomPaint(
-                                  willChange: true,
-                                  painter: HexStaticObjectPainter(
-                                    source: mapPainter,
-                                    viewBounds: _objectWindow.resolve(
-                                      _viewBounds.inflate(80),
-                                    ),
-                                    signature: identityHashCode(mapPainter),
-                                    overview:
-                                        _transformation.value.entry(0, 0) <=
-                                        MapCameraBounds.fitScale(
-                                              _mapViewport,
-                                              boardSize,
-                                            ) *
-                                            1.35,
-                                  ),
-                                ),
-                              ),
-                            IgnorePointer(
-                              child: CustomPaint(
-                                painter: HexUnitPainter(
-                                  state: state,
-                                  mod: controller.mod,
-                                  sprites: _sprites,
-                                  jumpProgress: 0,
-                                  alertOwner: -1,
-                                  selectedProvinceId: null,
-                                  visibleTiles: visibleTiles,
-                                  visibleWaterCells: visibleWater,
-                                ),
-                              ),
-                            ),
-                            IgnorePointer(
-                              child: CustomPaint(
-                                painter: _DiplomacyLandSelectionPainter(
-                                  state: state,
-                                  selected: _selected,
-                                  selectedWaterCells: _selectedWaterCells,
-                                  allocatedOwners: _effectiveAllocationOwners,
-                                  palette: controller.mod.palette,
-                                  priceCenter: _priceCenter,
-                                  price: _price,
-                                  priceProgress: _priceAnimation.value,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Map<int, int> get _effectiveAllocationOwners {
-    if (!_conferenceMode) return const <int, int>{};
-    final recipient = widget.conferenceRecipient!;
-    final result = Map<int, int>.from(widget.conferenceAllocations)
-      ..removeWhere((_, owner) => owner == recipient);
-    for (final tile in _selected) {
-      result[tile] = recipient;
-    }
-    return result;
-  }
-
-  Set<int> get _selectedWaterCells {
-    if (_conferenceMode) return const <int>{};
-    final selected = _selectedNaval.keys.toSet();
-    return <int>{
-      for (final cell in controller.viewState.waterCells)
-        if ((!widget.readOnly ||
-                controller.visibleWaterCellIndices.contains(cell.index)) &&
-            ((cell.boat != null &&
-                    selected.contains(
-                      _navalKey(
-                        NavalAssetRef(
-                          kind: NavalAssetKind.boat,
-                          id: cell.boat!.id,
-                        ),
-                      ),
-                    )) ||
-                (cell.seaFort != null &&
-                    selected.contains(
-                      _navalKey(
-                        NavalAssetRef(
-                          kind: NavalAssetKind.seaFort,
-                          id: cell.seaFort!.id,
-                        ),
-                      ),
-                    ))))
-          cell.index,
-    };
-  }
-
-  void _toggleTile(int? index, Set<int> visible, Set<int> visibleWater) {
-    if (index == null) return;
-    if (_conferenceMode) {
-      _toggleConferenceTile(index, visible);
-      return;
-    }
-    final tile = controller.viewState.hexes[index];
-    if (!tile.active) {
-      final cell = controller.viewState.waterCells
-          .where((candidate) => candidate.tiles.contains(index))
-          .firstOrNull;
-      if (cell == null || !visibleWater.contains(cell.index)) {
-        _showHint('Тұмандағы теңіз активін таңдауға болмайды');
-        return;
-      }
-      final references =
-          <NavalAssetRef>[
-                if (cell.boat case final boat?)
-                  NavalAssetRef(kind: NavalAssetKind.boat, id: boat.id),
-                if (cell.seaFort case final fort?)
-                  NavalAssetRef(kind: NavalAssetKind.seaFort, id: fort.id),
-              ]
-              .where(
-                (reference) => controller.canSelectDiplomacyNavalAsset(
-                  giver: widget.giver,
-                  waterCell: cell.index,
-                  reference: reference,
-                ),
-              )
-              .toList();
-      if (references.isEmpty) {
-        _showHint('Бұл теңіз активін осы тарап бере алмайды');
-        return;
-      }
-      var shownPrice = 0;
-      setState(() {
-        for (final reference in references) {
-          final key = _navalKey(reference);
-          if (_selectedNaval.remove(key) == null) {
-            _selectedNaval[key] = reference;
-            shownPrice += controller.engine.diplomacyNavalPrice(reference);
-          }
-        }
-      });
-      if (shownPrice > 0) {
-        _showPrice(
-          HexBoard.centerOfWater(controller.viewState, cell),
-          shownPrice,
-        );
-      }
-      return;
-    }
-    if (!visible.contains(index)) {
-      _showHint('Тұмандағы жерді таңдауға болмайды');
-      return;
-    }
-    if (!controller.canSelectDiplomacyLandTile(
-      giver: widget.giver,
-      index: index,
-    )) {
-      _showHint('Бұл жерді осы тарап бере алмайды');
-      return;
-    }
-    var added = false;
-    setState(() {
-      added = _selected.add(index);
-      if (!added) _selected.remove(index);
-    });
-    if (added) {
-      _showPrice(
-        HexBoard.centerOf(tile),
-        controller.engine.diplomacyLandPrice(index),
-      );
-    }
-  }
-
-  void _toggleConferenceTile(int index, Set<int> visible) {
-    if (!visible.contains(index)) {
-      _showHint('Тұмандағы даулы жерді таңдауға болмайды');
-      return;
-    }
-    if (widget.lockedConferenceTiles.contains(index)) {
-      _showHint('Бұл жер басқа одақтасқа бөлініп қойылған');
-      return;
-    }
-    final conferenceId = widget.conferenceId!;
-    if (!controller.canSelectPeaceConferenceTile(
-      conferenceId: conferenceId,
-      index: index,
-    )) {
-      _showHint('Бұл клетка осы жер бөлісуге кірмейді');
-      return;
-    }
-    if (_selected.contains(index)) {
-      setState(() => _selected.remove(index));
-      return;
-    }
-    final value = controller.engine.peaceConferenceTileValue(
-      conferenceId,
-      index,
-    );
-    final currentValue = _selected.fold<int>(
-      0,
-      (sum, tile) =>
-          sum + controller.engine.peaceConferenceTileValue(conferenceId, tile),
-    );
-    final quota = controller.engine.peaceConferenceQuota(
-      conferenceId,
-      widget.conferenceRecipient!,
-    );
-    if (currentValue + value > quota) {
-      _showHint('Үлес шегі асып кетті: ${currentValue + value} / $quota');
-      return;
-    }
-    setState(() => _selected.add(index));
-    _showPrice(HexBoard.centerOf(controller.viewState.hexes[index]), value);
-  }
-
-  void _showPrice(Offset center, int price) {
-    setState(() {
-      _priceCenter = center;
-      _price = price;
-    });
-    _priceAnimation.forward(from: 0);
-  }
-
-  void _showHint(String message) {
-    showTopSnackBar(
-      context,
-      message,
-      duration: const Duration(milliseconds: 1100),
-    );
-  }
-
-  int? _nearestTile(Offset point, GameState state) {
-    final coordinate = OrganicCells.coordinateAt(point);
-    for (final tile in state.hexes) {
-      if (tile.inWorld && tile.q == coordinate.$1 && tile.r == coordinate.$2) {
-        return tile.index;
-      }
-    }
-    return null;
-  }
-
-  void _fitCamera(Size viewport, Size boardSize, GameState state) {
-    final focus = {
-      ..._selected,
-      for (final i in _selectedWaterCells) ...state.waterCells[i].tiles,
-    };
-    final centers = state.hexes
-        .where(
-          (tile) =>
-              tile.inWorld && (focus.isEmpty || focus.contains(tile.index)),
-        )
-        .map(HexBoard.centerOf)
-        .toList();
-    if (centers.isEmpty || viewport.isEmpty) return;
-    var minX = centers.first.dx;
-    var maxX = centers.first.dx;
-    var minY = centers.first.dy;
-    var maxY = centers.first.dy;
-    for (final center in centers.skip(1)) {
-      minX = math.min(minX, center.dx);
-      maxX = math.max(maxX, center.dx);
-      minY = math.min(minY, center.dy);
-      maxY = math.max(maxY, center.dy);
-    }
-    final contentWidth = math.max(1.0, maxX - minX + 80);
-    final contentHeight = math.max(1.0, maxY - minY + 80);
-    final scale = math
-        .min(viewport.width / contentWidth, viewport.height / contentHeight)
-        .clamp(MapCameraBounds.fitScale(viewport, boardSize), 1.45);
-    final target = Offset((minX + maxX) / 2, (minY + maxY) / 2);
-    _transformation.value =
-        MapCameraBounds(
-          viewport: viewport,
-          canvas: boardSize,
-          minScale: MapCameraBounds.fitScale(viewport, boardSize),
-          maxScale: 2.8,
-        ).constrain(
-          Matrix4.diagonal3Values(scale, scale, scale)..setTranslationRaw(
-            viewport.width / 2 - target.dx * scale,
-            viewport.height / 2 - target.dy * scale,
-            0,
-          ),
-        );
-  }
-}
-
-class _DiplomacyLandSelectionPainter extends CustomPainter {
-  const _DiplomacyLandSelectionPainter({
-    required this.state,
-    required this.selected,
-    required this.selectedWaterCells,
-    required this.allocatedOwners,
-    required this.palette,
-    required this.priceCenter,
-    required this.price,
-    required this.priceProgress,
-  });
-
-  final GameState state;
-  final Set<int> selected;
-  final Set<int> selectedWaterCells;
-  final Map<int, int> allocatedOwners;
-  final List<Color> palette;
-  final Offset? priceCenter;
-  final int price;
-  final double priceProgress;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    for (final entry in allocatedOwners.entries) {
-      final index = entry.key;
-      if (index < 0 || index >= state.hexes.length || palette.isEmpty) continue;
-      final path = _hexPath(HexBoard.centerOf(state.hexes[index]), 27);
-      final color = palette[entry.value % palette.length];
-      canvas.drawPath(path, Paint()..color = color.withValues(alpha: .38));
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = color.withValues(alpha: .95)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.4,
-      );
-    }
-    for (final index in selected) {
-      if (index < 0 || index >= state.hexes.length) continue;
-      final path = _hexPath(HexBoard.centerOf(state.hexes[index]), 27);
-      canvas.drawPath(
-        path,
-        Paint()..color = Colors.white.withValues(alpha: .24),
-      );
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = const Color(0xffeefcff)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 4,
-      );
-    }
-    for (final waterCell in selectedWaterCells) {
-      if (waterCell < 0 || waterCell >= state.waterCells.length) continue;
-      final cell = state.waterCells[waterCell];
-      for (final tileIndex in cell.tiles) {
-        if (tileIndex < 0 || tileIndex >= state.hexes.length) continue;
-        final path = _hexPath(HexBoard.centerOf(state.hexes[tileIndex]), 27);
-        canvas.drawPath(
-          path,
-          Paint()..color = const Color(0xff75eaff).withValues(alpha: .22),
-        );
-        canvas.drawPath(
-          path,
-          Paint()
-            ..color = const Color(0xff75eaff)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 4,
-        );
-      }
-    }
-    final center = priceCenter;
-    if (center != null && price > 0 && priceProgress < 1) {
-      final opacity = (1 - priceProgress).clamp(0.0, 1.0);
-      final painter = TextPainter(
-        text: TextSpan(
-          text: '\$$price',
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: opacity),
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            shadows: [
-              Shadow(
-                color: Colors.black.withValues(alpha: opacity),
-                blurRadius: 4,
-              ),
-            ],
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      painter.paint(
-        canvas,
-        center.translate(-painter.width / 2, -18 - 30 * priceProgress),
-      );
-    }
-  }
-
-  Path _hexPath(Offset center, double radius) =>
-      OrganicCells.around(center, inset: 30 - radius);
-
-  @override
-  bool shouldRepaint(_DiplomacyLandSelectionPainter oldDelegate) => true;
 }
 
 class _ValueLine extends StatelessWidget {

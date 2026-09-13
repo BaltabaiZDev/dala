@@ -2,6 +2,8 @@
 /// Limits bound flood fills, sprite memory and economic arithmetic on phones.
 enum ModMovement { land, air }
 
+enum ModBuildingTemplate { radar, barracks, airfield, mine, fortification }
+
 class ModBuilding {
   const ModBuilding({
     required this.id,
@@ -13,7 +15,49 @@ class ModBuilding {
     this.vision = 0,
     this.production = const [],
     this.icon = 'building',
-  });
+    ModBuildingTemplate? template,
+  }) : _template = template;
+  final ModBuildingTemplate? _template;
+  bool get hasExplicitTemplate => _template != null;
+  ModBuildingTemplate get template =>
+      _template ??
+      (production.any((u) => u.movement == ModMovement.air) ||
+              icon == 'airfield'
+          ? ModBuildingTemplate.airfield
+          : production.isNotEmpty || icon == 'factory'
+          ? ModBuildingTemplate.barracks
+          : income > 0
+          ? ModBuildingTemplate.mine
+          : vision > 2 || icon == 'radar'
+          ? ModBuildingTemplate.radar
+          : ModBuildingTemplate.fortification);
+
+  bool supportsUnit(ModUnitType unit) => switch (template) {
+    ModBuildingTemplate.airfield => unit.movement == ModMovement.air,
+    ModBuildingTemplate.barracks => unit.movement == ModMovement.land,
+    _ => false,
+  };
+
+  void validateTemplate() {
+    final compatible = switch (template) {
+      ModBuildingTemplate.radar =>
+        income == 0 && defense <= 1 && production.isEmpty,
+      ModBuildingTemplate.mine =>
+        defense <= 1 && vision <= 2 && production.isEmpty,
+      ModBuildingTemplate.fortification =>
+        income == 0 && vision <= 2 && production.isEmpty,
+      ModBuildingTemplate.airfield =>
+        income == 0 && defense <= 1 && vision <= 2,
+      ModBuildingTemplate.barracks =>
+        income == 0 && defense <= 2 && vision <= 2,
+    };
+    if (!compatible || production.any((unit) => !supportsUnit(unit))) {
+      throw FormatException(
+        '$id: properties do not match the ${template.name} template.',
+      );
+    }
+  }
+
   final String id;
   final String name;
   final int price;
@@ -25,6 +69,7 @@ class ModBuilding {
   final String icon;
 
   Map<String, dynamic> toJson() => {
+    if (_template != null) 'template': template.name,
     'id': id,
     'name': name,
     'price': price,
@@ -51,8 +96,18 @@ class ModBuilding {
       'vision',
       'production',
       'icon',
+      'template',
     });
-    return ModBuilding(
+    final template = json['template'] == null
+        ? null
+        : ModBuildingTemplate.values
+              .where((t) => t.name == json['template'])
+              .firstOrNull;
+    if (json['template'] != null && template == null) {
+      throw const FormatException('Unknown building template.');
+    }
+    final building = ModBuilding(
+      template: template,
       id: _id(json['id']),
       name: _name(json['name']),
       price: _integer(json, 'price', 0, 1000000),
@@ -78,6 +133,8 @@ class ModBuilding {
         'factory',
       }),
     );
+    building.validateTemplate();
+    return building;
   }
 }
 

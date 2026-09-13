@@ -15,6 +15,7 @@ class LanStatePatchBuilder {
   final Map<String, Object?> _scalarValues = <String, Object?>{};
 
   static const List<String> _sectionKeys = <String>[
+    'turnOrder',
     'provinces',
     'campaigns',
     'peaceConferences',
@@ -122,6 +123,7 @@ class LanStatePatchBuilder {
   }
 
   Map<String, dynamic> _sectionJson(GameState state) => <String, dynamic>{
+    'turnOrder': state.turnOrder,
     'provinces': state.provinces.map((item) => item.toJson()).toList(),
     'campaigns': state.campaigns.map((item) => item.toJson()).toList(),
     'peaceConferences': state.peaceConferences

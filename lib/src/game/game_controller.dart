@@ -10,6 +10,8 @@ import 'game_engine.dart';
 import 'map_generator.dart';
 import 'models.dart';
 
+part 'territory_selection.dart';
+
 enum PlayerTool {
   select,
   unit1,
@@ -88,6 +90,11 @@ class SeaFortDestructionAnimation {
 }
 
 class GameController extends ChangeNotifier {
+  TerritorySelection? territorySelection;
+  void _notifyTerritoryChanged() {
+    if (_active) notifyListeners();
+  }
+
   GameController({
     required this.mod,
     required this.state,
@@ -205,7 +212,7 @@ class GameController extends ChangeNotifier {
 
   GameState get viewState => _concealedState ?? state;
 
-  int get visibilityPlayer => _visibilityPlayer ?? state.turn;
+  int get visibilityPlayer => localPlayer ?? _visibilityPlayer ?? state.turn;
 
   String playerName(int player) => state.playerName(player);
 
@@ -364,6 +371,9 @@ class GameController extends ChangeNotifier {
     final rawSections = patch['sections'];
     if (rawSections is Map) {
       final sections = rawSections.cast<String, dynamic>();
+      if (sections['turnOrder'] case final List values) {
+        state.turnOrder = values.cast<int>();
+      }
       if (sections['provinces'] case final List values) {
         state.provinces = values
             .whereType<Map>()
@@ -558,14 +568,11 @@ class GameController extends ChangeNotifier {
       throw StateError('Бұл ойыншының жүрісі емес.');
     }
     final previousActor = _networkActor;
-    final previousVisibility = _visibilityPlayer;
     _networkActor = player;
-    _visibilityPlayer = player;
     try {
       return await action();
     } finally {
       _networkActor = previousActor;
-      _visibilityPlayer = previousVisibility;
     }
   }
 
@@ -605,12 +612,7 @@ class GameController extends ChangeNotifier {
   }
 
   bool get fogActive {
-    if (!state.config.fogOfWar || state.config.humanCount == 0) return false;
-    final viewer = visibilityPlayer;
-    return viewState.provinces.any((province) => province.owner == viewer) ||
-        viewState.waterCells.any(
-          (cell) => cell.boat?.owner == viewer || cell.seaFort?.owner == viewer,
-        );
+    return state.config.fogOfWar && state.config.humanCount > 0;
   }
 
   /// Decorative full-board animation detail follows the camera, not map size.
@@ -677,41 +679,26 @@ class GameController extends ChangeNotifier {
 
   bool isPlayerVisible(int player) => visiblePlayerIndices.contains(player);
 
-  bool _viewAreAllies(int first, int second) {
-    if (first == second) return true;
-    final visibleState = viewState;
-    if (!visibleState.config.diplomacy ||
-        first < 0 ||
-        second < 0 ||
-        first >= visibleState.config.playerCount ||
-        second >= visibleState.config.playerCount) {
-      return false;
-    }
-    final direct = visibleState.diplomacyRelations[first][second];
-    if (direct == DiplomacyStatus.alliance ||
-        direct == DiplomacyStatus.coalition) {
-      return true;
-    }
-    final reached = <int>{first};
-    final queue = <int>[first];
-    for (var cursor = 0; cursor < queue.length; cursor++) {
-      final current = queue[cursor];
-      for (var player = 0; player < visibleState.config.playerCount; player++) {
-        if (reached.contains(player) ||
-            visibleState.diplomacyRelations[current][player] !=
-                DiplomacyStatus.coalition) {
-          continue;
-        }
-        if (player == second) return true;
-        reached.add(player);
-        queue.add(player);
-      }
-    }
-    return false;
-  }
+  bool _viewAreAllies(int first, int second) => first == second;
 
   bool isTileVisible(int index) =>
-      !fogActive || visibleTileIndices.contains(index);
+      !fogActive || _actionVisibleLand.contains(index);
+
+  // Command authorization uses its actor; painting always uses this device.
+  Set<int> get _actionVisibleLand => _networkActor == null
+      ? visibleTileIndices
+      : landVisionTiles(
+          state,
+          mod,
+          (owner) => engine.areAllies(_networkActor!, owner),
+        );
+  Set<int> get _actionVisibleWater => _networkActor == null
+      ? visibleWaterCellIndices
+      : waterVisionCells(
+          state,
+          mod,
+          (owner) => engine.areAllies(_networkActor!, owner),
+        );
 
   /// Diplomacy land offers must never reveal or accept a cell that the active
   /// human cannot currently see through fog of war.
@@ -775,7 +762,7 @@ class GameController extends ChangeNotifier {
   }
 
   bool isWaterCellVisible(int index) =>
-      !fogActive || visibleWaterCellIndices.contains(index);
+      !fogActive || _actionVisibleWater.contains(index);
 
   void requestBetterDiplomacy(int other) {
     if (!state.config.diplomacy ||
@@ -788,7 +775,10 @@ class GameController extends ChangeNotifier {
       return;
     }
     final current = engine.diplomacyBetween(state.turn, other);
-    if (current == DiplomacyStatus.coalition) return;
+    if (current == DiplomacyStatus.coalition ||
+        current == DiplomacyStatus.alliance) {
+      return;
+    }
     final type = switch (current) {
       DiplomacyStatus.war => DiplomacyProposalType.peace,
       DiplomacyStatus.peace => DiplomacyProposalType.friendship,
@@ -1191,7 +1181,7 @@ class GameController extends ChangeNotifier {
     if (index < 0 || index >= state.hexes.length) return false;
     if (!fogActive) return true;
     if (state.hexes[index].active) return isTileVisible(index);
-    final visibleWater = visibleWaterCellIndices;
+    final visibleWater = _actionVisibleWater;
     return state.waterCells.any(
       (cell) => visibleWater.contains(cell.index) && cell.tiles.contains(index),
     );
@@ -1926,6 +1916,7 @@ class GameController extends ChangeNotifier {
     state.provinces = restored.provinces;
     state.diplomacySocial = restored.diplomacySocial;
     state.turn = restored.turn;
+    state.turnOrder = restored.turnOrder;
     state.round = restored.round;
     state.rngState = restored.rngState;
     state.nextProvinceId = restored.nextProvinceId;
@@ -2097,6 +2088,7 @@ class GameController extends ChangeNotifier {
     var firstAiInBatch = true;
     while (_active && !state.currentPlayerIsHuman && state.winner == null) {
       final player = state.turn;
+      final roundBefore = state.round;
       aiPlayer = concealTurns ? null : player;
       aiProgress = 0;
       if (!concealTurns) {
@@ -2121,7 +2113,7 @@ class GameController extends ChangeNotifier {
       firstAiInBatch = false;
       if (state.config.humanCount == 0 &&
           autosaveEnabled &&
-          (state.turn <= player || state.winner != null)) {
+          (state.round != roundBefore || state.winner != null)) {
         await saves.save(state);
       }
       final visibleStrikes = concealTurns
@@ -2155,6 +2147,7 @@ class GameController extends ChangeNotifier {
   @override
   void dispose() {
     _active = false;
+    finishTerritorySelection(confirm: false);
     turnCompleted.dispose();
     _selectionFadeTimer?.cancel();
     _defensePreviewTimer?.cancel();
@@ -2311,8 +2304,11 @@ class GameController extends ChangeNotifier {
   ) => strikes
       .where(
         (strike) =>
-            state.isHuman(strike.sourceOwner) ||
-            state.isHuman(strike.targetOwner),
+            (state.isHuman(strike.sourceOwner) ||
+                state.isHuman(strike.targetOwner)) &&
+            (!fogActive ||
+                (visibleTileIndices.contains(strike.fromTile) &&
+                    visibleWaterCellIndices.contains(strike.toWaterCell))),
       )
       .toList(growable: false);
 

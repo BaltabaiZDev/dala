@@ -665,5 +665,20 @@
   "Сипаттама": "Išsami informacija",
   "Орын жоқ": "Nėra vietos",
   "Қазір қолжетімсіз": "Šiuo metu nepasiekiama",
-  "Ақша жетпейді": "Nepakanka pinigų"
+  "Ақша жетпейді": "Nepakanka pinigų",
+  "Шекарада тыныштық ұсынамыз.": "Laikykimės taikios sienos.",
+  "Соғысты тоқтатайық.": "Baigkime karą.",
+  "Бағаны өзгертуді ұсынамыз.": "Siūlome kitokią kainą.",
+  "Көмекке айырбас — достық.": "Pagalba mainais į draugystę.",
+  "Төлемге айырбас — достық.": "Mokėjimas mainais į draugystę.",
+  "Ортақ жауға қарсы ұсыныс.": "Pasiūlymas prieš bendrą mūsų priešą.",
+  "Өзара тиімді айырбас ұсынамыз.": "Siūlome sąžiningus mainus.",
+  "Келістік.": "Sutiko.",
+  "Бұл соғысқа күшіміз жетпейді.": "Mes negalime sau leisti šio karo.",
+  "Қазынамыз бұл шығынды көтермейді.": "Mūsų iždas negali padengti šių išlaidų.",
+  "Тиімсіз ұсыныс. Бағаны қайта қарайық.": "Nepalankus pasiūlymas. Iš naujo derėkimės.",
+  "Достықты тоқтатамыз. Өтемақы төленеді.": "Nutraukiame draugystę ir sumokėsime kompensaciją.",
+  "Өтемақы: {0} × {1} ход = {2}.": "Kompensacija: {0} × {1} žaidimo raundai = {2}.",
+  "Бағасы {0}": "Kaina {0}",
+  "Соғыс → {0}": "Karas → {0}"
 }

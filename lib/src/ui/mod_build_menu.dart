@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../game/game_controller.dart';
 import '../game/game_engine.dart';
@@ -110,11 +111,7 @@ class _ModTypeMenuState extends State<_ModTypeMenu> {
       return '$id $name'.toLowerCase().contains(_query);
     }).toList();
     final media = MediaQuery.of(context);
-    // Row height follows text size, never name length or the number of stats.
-    final rowHeight = (22 + media.textScaler.scale(14) * 3.75).clamp(
-      76.0,
-      double.infinity,
-    );
+    final tileHeight = 66 + media.textScaler.scale(14) * 3.7;
     return SafeArea(
       child: ConstrainedBox(
         constraints: BoxConstraints(
@@ -168,95 +165,116 @@ class _ModTypeMenuState extends State<_ModTypeMenu> {
                         padding: EdgeInsets.all(16),
                         child: GameText('Бос'),
                       )
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: ids.length,
-                        itemExtent: rowHeight,
-                        itemBuilder: (context, index) {
-                          final id = ids[index];
-                          final building = mod.buildings[id];
-                          final unit = mod.units[id];
-                          final name = building?.name ?? unit!.name;
-                          final price = building?.price ?? unit!.price;
-                          final upkeep = building?.upkeep ?? unit!.upkeep;
-                          final reason = widget.unavailableReason?.call(id);
-                          return Row(
-                            children: [
-                              Expanded(
-                                child: Opacity(
-                                  opacity: reason == null ? 1 : .55,
-                                  child: InkWell(
-                                    key: ValueKey('mod-type-$id'),
-                                    onTap: reason == null
-                                        ? () => Navigator.pop(context, id)
-                                        : null,
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 6,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          ModPieceIcon(
-                                            mod: mod,
-                                            id: id,
-                                            size: 32,
-                                          ),
-                                          const SizedBox(width: 10),
-                                          Expanded(
-                                            child: Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  name,
-                                                  maxLines: 2,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                    fontSize: 14,
-                                                    height: 1.15,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 3),
-                                                Text(
-                                                  reason == null
-                                                      ? '${context.tr('Бағасы')}: $price · ${context.tr('Шығын')}: $upkeep'
-                                                      : context.tr(reason),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    height: 1.15,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                    : LayoutBuilder(
+                        builder: (context, constraints) => GridView.builder(
+                          shrinkWrap: true,
+                          itemCount: ids.length,
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: math.max(
+                                  1,
+                                  (constraints.maxWidth /
+                                          media.textScaler.scale(100))
+                                      .floor(),
                                 ),
+                                mainAxisExtent: tileHeight,
+                                crossAxisSpacing: 6,
+                                mainAxisSpacing: 6,
                               ),
-                              IconButton(
-                                key: ValueKey('mod-info-$id'),
-                                tooltip: context.tr('Сипаттама'),
-                                onPressed: () =>
-                                    showModTypeDetails(context, mod, id),
-                                icon: const Icon(Icons.info_outline, size: 20),
-                              ),
-                            ],
-                          );
-                        },
+                          itemBuilder: (context, index) => _ModCatalogTile(
+                            mod: mod,
+                            id: ids[index],
+                            reason: widget.unavailableReason?.call(ids[index]),
+                          ),
+                        ),
                       ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ModCatalogTile extends StatelessWidget {
+  const _ModCatalogTile({required this.mod, required this.id, this.reason});
+  final GameMod mod;
+  final String id;
+  final String? reason;
+  @override
+  Widget build(BuildContext context) {
+    final building = mod.buildings[id];
+    final unit = mod.units[id];
+    final name = building?.name ?? unit!.name;
+    final price = building?.price ?? unit!.price;
+    final upkeep = building?.upkeep ?? unit!.upkeep;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: DalaTheme.gold.withValues(alpha: .35),
+        border: Border.all(color: DalaTheme.ink.withValues(alpha: .2)),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Semantics(
+              button: true,
+              enabled: reason == null,
+              label:
+                  '$name · ${context.tr('Бағасы')}: $price · ${context.tr('Шығын')}: $upkeep',
+              child: InkWell(
+                key: ValueKey('mod-type-$id'),
+                onTap: reason == null ? () => Navigator.pop(context, id) : null,
+                child: Opacity(
+                  opacity: reason == null ? 1 : .45,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(5, 10, 5, 5),
+                    child: Column(
+                      children: [
+                        ModPieceIcon(mod: mod, id: id, size: 38),
+                        const SizedBox(height: 5),
+                        Expanded(
+                          child: Center(
+                            child: Text(
+                              name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                height: 1.1,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Text(
+                          reason == null
+                              ? '\$$price · −$upkeep/↻'
+                              : context.tr(reason!),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            right: 0,
+            child: IconButton(
+              key: ValueKey('mod-info-$id'),
+              tooltip: context.tr('Сипаттама'),
+              onPressed: () => showModTypeDetails(context, mod, id),
+              icon: const Icon(Icons.info_outline, size: 17),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -102,18 +102,20 @@ void main() {
     );
   });
 
-  test('military treaty expires to friendship, round-trip preserves timer', () {
+  test('friendship timer survives save and expires without shared access', () {
     final state = strategicFixture(humans: 3);
     final e = GameEngine(mod: mod, state: state);
-    expect(e.formMilitaryAlliance(0, 1, duration: 1), isTrue);
+    e.setDiplomacyStatus(0, 1, DiplomacyStatus.alliance);
+    state.diplomacyAllianceTurns[0][1] = 1;
+    state.diplomacyAllianceTurns[1][0] = 1;
     final copy = GameState.fromJson(jsonDecode(jsonEncode(state.toJson())));
     expect(copy.diplomacyAllianceTurns[0][1], 1);
     final initialRound = state.round;
     while (state.round == initialRound) {
       e.endTurn();
     }
-    expect(e.diplomacyBetween(0, 1), DiplomacyStatus.alliance);
-    expect(e.allianceTurnsLeft(0, 1), 6);
+    expect(e.diplomacyBetween(0, 1), DiplomacyStatus.peace);
+    expect(e.allianceTurnsLeft(0, 1), 0);
     expect(e.hasMilitaryAccess(0, 1), isFalse);
   });
 

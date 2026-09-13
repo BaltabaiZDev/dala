@@ -5,11 +5,24 @@ import 'package:antiyoy_self/src/game/map_generator.dart';
 import 'package:antiyoy_self/src/game/models.dart';
 import 'package:antiyoy_self/src/modding/content_package.dart';
 import 'package:antiyoy_self/src/modding/game_mod.dart';
+import 'package:antiyoy_self/src/modding/example_mod.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   test('export playable community-content examples', () async {
     final base = await GameMod.loadDefault();
+    final technology = createExampleMod(base);
+    await Directory('examples/technologies-source').create(recursive: true);
+    await File(
+      'examples/mods/dala-technologies.dalamod',
+    ).writeAsBytes(ContentPackage(mod: technology).encode());
+    await File('examples/technologies-source/mod.json').writeAsString(
+      const JsonEncoder.withIndent('  ').convert({
+        'format': 'dala-mod',
+        'version': 4,
+        'mod': technology.toJson(),
+      }),
+    );
     final raw = base.toJson()
       ..['id'] = 'molshylyk'
       ..['name'] = 'Молшылық'

@@ -2,8 +2,8 @@ export 'lan_address.dart' show lanDefaultPort;
 import '../game/models.dart';
 import '../modding/game_mod.dart';
 
-// Declarative buildings/units and aircraft commands must agree on all devices.
-const int lanProtocolVersion = 9;
+// Turn order and diplomacy rules must agree on every device.
+const int lanProtocolVersion = 10;
 
 const int lanMaxPlayerNameLength = 20;
 const int lanMaxMessageLength = 512;

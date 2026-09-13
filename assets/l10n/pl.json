@@ -665,5 +665,20 @@
   "Сипаттама": "Szczegóły",
   "Орын жоқ": "Brak miejsca",
   "Қазір қолжетімсіз": "Teraz niedostępne",
-  "Ақша жетпейді": "Za mało pieniędzy"
+  "Ақша жетпейді": "Za mało pieniędzy",
+  "Шекарада тыныштық ұсынамыз.": "Dbajmy o spokój na granicy.",
+  "Соғысты тоқтатайық.": "Zakończmy wojnę.",
+  "Бағаны өзгертуді ұсынамыз.": "Proponujemy inną cenę.",
+  "Көмекке айырбас — достық.": "Pomoc w zamian za przyjaźń.",
+  "Төлемге айырбас — достық.": "Płatność w zamian za przyjaźń.",
+  "Ортақ жауға қарсы ұсыныс.": "Oferta przeciwko naszemu wspólnemu wrogowi.",
+  "Өзара тиімді айырбас ұсынамыз.": "Proponujemy uczciwą wymianę.",
+  "Келістік.": "Zgadza się.",
+  "Бұл соғысқа күшіміз жетпейді.": "Nie stać nas na tę wojnę.",
+  "Қазынамыз бұл шығынды көтермейді.": "Nasz skarb państwa nie jest w stanie pokryć tego kosztu.",
+  "Тиімсіз ұсыныс. Бағаны қайта қарайық.": "Niekorzystna oferta. Renegocjujmy.",
+  "Достықты тоқтатамыз. Өтемақы төленеді.": "Kończymy naszą przyjaźń i zapłacimy odszkodowanie.",
+  "Өтемақы: {0} × {1} ход = {2}.": "Kompensacja: {0} × {1} rundy gry = {2}.",
+  "Бағасы {0}": "Cena {0}",
+  "Соғыс → {0}": "Wojna → {0}"
 }

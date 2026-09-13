@@ -96,7 +96,9 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final humans = await showMapSetup(context, entry.map);
       if (!mounted || humans == null) return;
-      await _openGame(entry.map.createState(mod, humanCount: humans));
+      await _openGame(
+        entry.map.createState(mod, humanCount: humans)..randomizeTurnOrder(),
+      );
     } on Object catch (error) {
       if (mounted) showTopSnackBar(context, error.toString());
     }
@@ -139,6 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
       semanticsLabel: 'Карта жасалуда',
       task: () async {
         final state = await generateMapAsync(_library.activeMod, config);
+        state.randomizeTurnOrder();
         final settings = await _settings.load();
         if (settings.autosave) await widget.saves.save(state);
         return (state: state, autosave: settings.autosave);
@@ -169,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
         requirePlayable: true,
         rules: _library.activeMod.rules,
       )) {
-        await _openGame(result);
+        await _openGame(result..randomizeTurnOrder());
       }
     }
   }
@@ -308,7 +311,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     final settings = await _settings.load();
     if (!mounted) return;
-    await _openGame(state, autosaveEnabled: settings.autosave);
+    await _openGame(
+      state..randomizeTurnOrder(),
+      autosaveEnabled: settings.autosave,
+    );
   }
 
   @override
@@ -1963,6 +1969,6 @@ String _difficultyLabel(AiDifficulty value) => switch (value) {
   AiDifficulty.easy => 'жеңіл',
   AiDifficulty.normal => 'қалыпты',
   AiDifficulty.hard => 'қиын',
-  AiDifficulty.veryHard => 'сарапшы',
-  AiDifficulty.master => 'шебер',
+  AiDifficulty.veryHard => 'сарапшы · 1.5×',
+  AiDifficulty.master => 'шебер · 2×',
 };

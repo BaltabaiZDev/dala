@@ -665,5 +665,20 @@
   "Сипаттама": "Detalls",
   "Орын жоқ": "No hi ha espai",
   "Қазір қолжетімсіз": "No disponible ara",
-  "Ақша жетпейді": "Diners insuficients"
+  "Ақша жетпейді": "Diners insuficients",
+  "Шекарада тыныштық ұсынамыз.": "Mantenim la frontera en pau.",
+  "Соғысты тоқтатайық.": "Acabem la guerra.",
+  "Бағаны өзгертуді ұсынамыз.": "Us proposem un preu diferent.",
+  "Көмекке айырбас — достық.": "Ajut a canvi d'amistat.",
+  "Төлемге айырбас — достық.": "Pagament a canvi d'amistat.",
+  "Ортақ жауға қарсы ұсыныс.": "Una oferta contra el nostre enemic comú.",
+  "Өзара тиімді айырбас ұсынамыз.": "Proposem un intercanvi just.",
+  "Келістік.": "D'acord.",
+  "Бұл соғысқа күшіміз жетпейді.": "No ens podem permetre aquesta guerra.",
+  "Қазынамыз бұл шығынды көтермейді.": "La nostra tresoreria no pot cobrir aquest cost.",
+  "Тиімсіз ұсыныс. Бағаны қайта қарайық.": "Una oferta desfavorable. Renegociem.",
+  "Достықты тоқтатамыз. Өтемақы төленеді.": "Estem acabant amb la nostra amistat i pagarem una indemnització.",
+  "Өтемақы: {0} × {1} ход = {2}.": "Compensació: {0} × {1} rondes de joc = {2}.",
+  "Бағасы {0}": "Preu {0}",
+  "Соғыс → {0}": "Guerra → {0}"
 }

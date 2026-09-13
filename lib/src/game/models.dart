@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'player_names.dart';
 
 enum MapSize { small, medium, large, huge, giant }
@@ -15,8 +17,16 @@ extension MapSizeRules on MapSize {
 /// Existing save names (`easy`, `normal`, `hard`) remain valid.
 enum AiDifficulty { veryEasy, easy, normal, hard, veryHard, master }
 
+extension AiDifficultyEconomy on AiDifficulty {
+  int get incomePercent => switch (this) {
+    AiDifficulty.veryHard => 150,
+    AiDifficulty.master => 200,
+    _ => 100,
+  };
+}
+
 /// `alliance` is the existing timed friendship relation retained for save
-/// compatibility. `coalition` is the new military-alliance relation.
+/// compatibility. `coalition` is retired and migrated to peace on load.
 enum DiplomacyStatus { war, peace, alliance, coalition }
 
 enum DiplomacyProposalType { friendship, militaryAlliance, peace, exchange }
@@ -1014,6 +1024,7 @@ class GameState {
     List<WaterCell>? waterCells,
     required this.provinces,
     required this.turn,
+    List<int>? turnOrder,
     required this.round,
     required this.rngState,
     required this.nextProvinceId,
@@ -1036,7 +1047,8 @@ class GameState {
     List<String>? diplomacyLog,
     List<String>? playerNames,
     DiplomacySocialState? diplomacySocial,
-  }) : waterCells = waterCells ?? [],
+  }) : _turnOrder = _validatedTurnOrder(turnOrder, config.playerCount),
+       waterCells = waterCells ?? [],
        diplomacySocial =
            diplomacySocial ?? DiplomacySocialState(config.playerCount),
        playerNames = _normalizedPlayerNames(
@@ -1081,6 +1093,29 @@ class GameState {
   final List<WaterCell> waterCells;
   List<Province> provinces;
   int turn;
+  List<int> _turnOrder;
+  List<int> get turnOrder => _turnOrder;
+  set turnOrder(List<int> value) {
+    _turnOrder = _validatedTurnOrder(value, config.playerCount);
+  }
+
+  /// Called once when starting a match, never while loading or replaying it.
+  /// Seat IDs (human/bot identity, color and LAN ownership) stay unchanged.
+  void randomizeTurnOrder({math.Random? random}) {
+    final order = List<int>.generate(config.playerCount, (i) => i)
+      ..shuffle(random ?? math.Random.secure());
+    turnOrder = order;
+    turn = order.firstWhere(
+      (player) =>
+          provinces.any((province) => province.owner == player) ||
+          waterCells.any(
+            (cell) =>
+                cell.boat?.owner == player || cell.seaFort?.owner == player,
+          ),
+      orElse: () => order.first,
+    );
+  }
+
   int round;
   int rngState;
   int nextProvinceId;
@@ -1136,7 +1171,7 @@ class GameState {
   }
 
   Map<String, dynamic> toJson() => {
-    'schema': 12,
+    'schema': 13,
     'config': config.toJson(),
     'modId': modId,
     if (modSnapshot != null) 'modSnapshot': modSnapshot,
@@ -1146,6 +1181,7 @@ class GameState {
     'waterCells': waterCells.map((cell) => cell.toJson()).toList(),
     'provinces': provinces.map((province) => province.toJson()).toList(),
     'turn': turn,
+    'turnOrder': turnOrder,
     'round': round,
     'rngState': rngState,
     'nextProvinceId': nextProvinceId,
@@ -1197,6 +1233,7 @@ class GameState {
         .map((item) => Province.fromJson(item as Map<String, dynamic>))
         .toList(),
     turn: json['turn'] as int,
+    turnOrder: (json['turnOrder'] as List?)?.cast<int>(),
     round: json['round'] as int,
     rngState: json['rngState'] as int,
     nextProvinceId: json['nextProvinceId'] as int,
@@ -1267,6 +1304,16 @@ class GameState {
         .toList(),
     diplomacyLog: (json['diplomacyLog'] as List? ?? const []).cast<String>(),
   );
+}
+
+List<int> _validatedTurnOrder(List<int>? raw, int playerCount) {
+  final order = raw ?? List<int>.generate(playerCount, (i) => i);
+  if (order.length != playerCount ||
+      order.toSet().length != playerCount ||
+      order.any((player) => player < 0 || player >= playerCount)) {
+    throw const FormatException('Invalid turn order');
+  }
+  return List<int>.unmodifiable(order);
 }
 
 List<String>? _savedPlayerNames(Map<String, dynamic> json) {

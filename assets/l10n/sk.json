@@ -665,5 +665,20 @@
   "Сипаттама": "Podrobnosti",
   "Орын жоқ": "Nie je miesto",
   "Қазір қолжетімсіз": "Teraz nedostupné",
-  "Ақша жетпейді": "Nedostatok peňazí"
+  "Ақша жетпейді": "Nedostatok peňazí",
+  "Шекарада тыныштық ұсынамыз.": "Zachovajme pokoj na hranici.",
+  "Соғысты тоқтатайық.": "Ukončime vojnu.",
+  "Бағаны өзгертуді ұсынамыз.": "Navrhujeme inú cenu.",
+  "Көмекке айырбас — достық.": "Pomoc výmenou za priateľstvo.",
+  "Төлемге айырбас — достық.": "Platba výmenou za priateľstvo.",
+  "Ортақ жауға қарсы ұсыныс.": "Ponuka proti nášmu spoločnému nepriateľovi.",
+  "Өзара тиімді айырбас ұсынамыз.": "Navrhujeme férovú výmenu.",
+  "Келістік.": "Súhlasím.",
+  "Бұл соғысқа күшіміз жетпейді.": "Nemôžeme si dovoliť túto vojnu.",
+  "Қазынамыз бұл шығынды көтермейді.": "Naša pokladnica nemôže pokryť tieto náklady.",
+  "Тиімсіз ұсыныс. Бағаны қайта қарайық.": "Nevýhodná ponuka. Poďme znovu rokovať.",
+  "Достықты тоқтатамыз. Өтемақы төленеді.": "Ukončujeme naše priateľstvo a zaplatíme kompenzáciu.",
+  "Өтемақы: {0} × {1} ход = {2}.": "Kompenzácia: {0} × {1} herné kolá = {2}.",
+  "Бағасы {0}": "Cena {0}",
+  "Соғыс → {0}": "Vojna → {0}"
 }

@@ -6,6 +6,7 @@ import 'diplomacy_ai.dart';
 import 'game_engine.dart';
 import 'models.dart';
 part 'mod_ai.dart';
+part 'competitive_ai.dart';
 
 typedef _AiAction = bool Function();
 
@@ -55,7 +56,10 @@ class GameAi {
     final state = engine.state;
     if (state.winner != null) return;
     _beginTurn();
+    for (var i = 0; i < 24 && _takeExpansionAction(); i++) {}
+    if (state.winner != null) return;
     for (var i = 0; i < 64 && _takeModAction(); i++) {}
+    if (state.winner != null) return;
     if (usesClassicMasterLand) {
       lastClassicMasterReport = ClassicMasterAi(
         mod: mod,
@@ -89,6 +93,10 @@ class GameAi {
     final frameBudget = Stopwatch()..start();
     onProgress?.call(.02);
     if (yieldBeforeWork) await _yieldFrame(frameBudget);
+    for (var i = 0; i < 24 && _takeExpansionAction(); i++) {
+      if (_sliceExpired(frameBudget)) await _yieldFrame(frameBudget);
+    }
+    if (state.winner != null) return;
     for (var i = 0; i < 64 && _takeModAction(); i++) {
       if (_sliceExpired(frameBudget)) await _yieldFrame(frameBudget);
     }
@@ -206,107 +214,10 @@ class GameAi {
   void _manageDiplomacy() {
     if (!engine.state.config.diplomacy) return;
     final owner = engine.state.turn;
-    if (_managePeaceConferences(owner)) return;
     lastDiplomacyReport = StrategicDiplomacyAi(engine)..takeTurn(owner);
   }
 
-  /// Resolves the mod's post-war coalition conference before ordinary
-  /// diplomacy. A bot accepts a proposal that gives it most of its earned
-  /// quota (or whose remaining gap cannot fit even the cheapest disputed
-  /// tile); otherwise it sends one deterministic counteroffer. This keeps
-  /// human/AI conferences interactive without letting unattended AI blocs
-  /// wait until the five-round fallback every time.
-  bool _managePeaceConferences(int owner) {
-    final conferences = engine.peaceConferencesFor(owner).toList()
-      ..sort((a, b) => a.id.compareTo(b.id));
-    var acted = false;
-    for (final conference in conferences) {
-      if (conference.revision == 0) {
-        acted =
-            engine.submitPeaceConferenceProposal(
-              conference.id,
-              owner,
-              _buildPeaceConferenceAllocation(conference),
-            ) ||
-            acted;
-        continue;
-      }
-      if (conference.acceptedBy.contains(owner)) continue;
-      final quota = engine.peaceConferenceQuota(conference.id, owner);
-      final assigned = engine.peaceConferenceAssignedValue(
-        conference.id,
-        owner,
-      );
-      final cheapest = conference.tileValues.values.fold<int>(
-        1 << 30,
-        math.min,
-      );
-      final fair =
-          quota <= 0 ||
-          assigned * 4 >= quota * 3 ||
-          quota - assigned < cheapest;
-      if (fair) {
-        acted = engine.acceptPeaceConference(conference.id, owner) || acted;
-        continue;
-      }
-      acted =
-          engine.submitPeaceConferenceProposal(
-            conference.id,
-            owner,
-            _buildPeaceConferenceAllocation(conference),
-          ) ||
-          acted;
-    }
-    return acted;
-  }
-
-  Map<int, List<int>> _buildPeaceConferenceAllocation(
-    PeaceConference conference,
-  ) {
-    final remaining = <int, int>{
-      for (final player in conference.participants)
-        player: engine.peaceConferenceQuota(conference.id, player),
-    };
-    final allocation = <int, List<int>>{
-      for (final player in conference.participants) player: <int>[],
-    };
-    final tiles = conference.claimTiles.toList()
-      ..sort((first, second) {
-        final valueOrder = (conference.tileValues[second] ?? 0).compareTo(
-          conference.tileValues[first] ?? 0,
-        );
-        return valueOrder != 0 ? valueOrder : first.compareTo(second);
-      });
-    for (final tile in tiles) {
-      final value = conference.tileValues[tile] ?? 0;
-      final candidates =
-          conference.participants
-              .where((player) => (remaining[player] ?? 0) >= value)
-              .toList()
-            ..sort((first, second) {
-              final roomOrder = (remaining[second] ?? 0).compareTo(
-                remaining[first] ?? 0,
-              );
-              return roomOrder != 0 ? roomOrder : first.compareTo(second);
-            });
-      if (candidates.isEmpty) continue;
-      final recipient = candidates.first;
-      allocation[recipient]!.add(tile);
-      remaining[recipient] = remaining[recipient]! - value;
-    }
-    allocation.removeWhere((_, tiles) => tiles.isEmpty);
-    return allocation;
-  }
-
-  _LandAiProfile get _landProfile {
-    // Classic's factory has no Slay Master implementation and deliberately
-    // dispatches that combination to AiExpertSlayRules.
-    if (engine.state.config.slayRules && _tier == AiDifficulty.master.index) {
-      return _landAiProfiles[AiDifficulty.hard.index];
-    }
-    return _landAiProfiles[_tier];
-  }
-
+  _LandAiProfile get _landProfile => _landAiProfiles[_tier];
   bool get _canBuildFarms => _landProfile.buildsFarms;
   bool get _canBuildTowers => _landProfile.buildsTowers;
   bool get _canMerge => _landProfile.mergesUnits;
@@ -315,7 +226,6 @@ class GameAi {
   bool get _canUseSeaForts => _tier >= AiDifficulty.normal.index;
   bool get _canUpgradeNavy => _tier >= AiDifficulty.hard.index;
   bool get _canUpgradeArtillery => _tier >= AiDifficulty.veryHard.index;
-
   int get _maxUnitStrength => _landProfile.maxUnitStrength;
   int get _survivalTurns => const [1, 2, 3, 4, 5, 5][_tier];
 

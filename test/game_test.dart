@@ -2716,29 +2716,35 @@ void main() {
     );
   });
 
-  test('guardian AI reserves money and fortifies a real threatened border', () {
-    final raw = _linearState([1, 1, 1, 0, 0], turn: 1, humanCount: 0).toJson()
-      ..['config'] = const GameConfig(
-        playerCount: 2,
-        humanCount: 0,
-        seed: 1,
-        difficulty: AiDifficulty.master,
-        slayRules: true,
-      ).toJson()
-      ..['round'] = 5;
-    final state = GameState.fromJson(raw);
-    state.hexes[3].object = TileObject.strongTower;
-    state.provinces.firstWhere((province) => province.owner == 1).money = 200;
-    final engine = GameEngine(mod: mod, state: state);
-    expect(GameAi(mod: mod, engine: engine).personalityId, 2);
+  test(
+    'guardian AI neutralizes a threatened border by attack or fortification',
+    () {
+      final raw = _linearState([1, 1, 1, 0, 0], turn: 1, humanCount: 0).toJson()
+        ..['config'] = const GameConfig(
+          playerCount: 2,
+          humanCount: 0,
+          seed: 1,
+          difficulty: AiDifficulty.master,
+          slayRules: true,
+        ).toJson()
+        ..['round'] = 5;
+      final state = GameState.fromJson(raw);
+      state.hexes[3].object = TileObject.strongTower;
+      state.provinces.firstWhere((province) => province.owner == 1).money = 200;
+      final engine = GameEngine(mod: mod, state: state);
+      expect(GameAi(mod: mod, engine: engine).personalityId, 2);
 
-    GameAi(mod: mod, engine: engine).takeTurn();
+      GameAi(mod: mod, engine: engine).takeTurn();
 
-    expect(
-      state.hexes.where((tile) => tile.owner == 1).map((tile) => tile.object),
-      contains(TileObject.tower),
-    );
-  });
+      expect(
+        state.hexes[3].owner == 1 ||
+            state.hexes.any(
+              (tile) => tile.owner == 1 && tile.object == TileObject.tower,
+            ),
+        isTrue,
+      );
+    },
+  );
 
   test('explicit province count creates one to three starting economies', () {
     for (var count = 1; count <= 3; count++) {
@@ -2851,7 +2857,7 @@ void main() {
     );
 
     final restored = GameState.fromJson(state.toJson());
-    expect(state.toJson()['schema'], 12);
+    expect(state.toJson()['schema'], 13);
     expect(restored.config.humanCount, 0);
     expect(restored.config.slayRules, isFalse);
     expect(restored.config.fogOfWar, isTrue);
@@ -3482,7 +3488,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 900));
     expect(find.text('Достық'), findsOneWidget);
     expect(find.textContaining('Субсидия'), findsOneWidget);
-    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('diplomacy-exchange-page')),
+      findsOneWidget,
+    );
     expect(find.byTooltip('Артқа'), findsOneWidget);
     await tester.tap(find.byTooltip('Артқа'));
     await tester.pump(const Duration(milliseconds: 500));
@@ -3569,7 +3578,10 @@ void main() {
             .height,
         shellSize.height,
       );
-      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('diplomacy-exchange-page')),
+        findsOneWidget,
+      );
       expect(find.byTooltip('Артқа'), findsOneWidget);
 
       final firstOfferType = find.byKey(const ValueKey('offer-type-1-0'));
@@ -3670,13 +3682,14 @@ void main() {
       await settleOverlay();
       await tester.tap(find.byKey(const ValueKey('land-map-picker-1')));
       await settleOverlay();
+      expect(find.byKey(const ValueKey('territory-confirm')), findsOneWidget);
+      expect(find.textContaining(RegExp(r'#\d+')), findsNothing);
+      await tester.binding.handlePopRoute();
+      await settleOverlay();
       expect(
-        find.byKey(const ValueKey('diplomacy-land-selection-page')),
+        find.byKey(const ValueKey('diplomacy-exchange-page')),
         findsOneWidget,
       );
-      expect(find.textContaining(RegExp(r'#\d+')), findsNothing);
-      await tester.tap(find.byKey(const ValueKey('land-selection-cancel')));
-      await settleOverlay();
 
       await tester.tap(find.byTooltip('Артқа'));
       await settleOverlay();

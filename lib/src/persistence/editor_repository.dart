@@ -936,6 +936,13 @@ class EditorRepository {
         json['hexes'] is! List ||
         json['provinces'] is! List ||
         !isInt(json['turn']) ||
+        (json.containsKey('turnOrder') &&
+            (!isIntList(json['turnOrder']) ||
+                (json['turnOrder'] as List).length != players ||
+                (json['turnOrder'] as List).toSet().length != players ||
+                !(json['turnOrder'] as List).every(
+                  (p) => p >= 0 && p < players,
+                ))) ||
         !isInt(json['round']) ||
         !isInt(json['rngState']) ||
         !isInt(json['nextProvinceId']) ||

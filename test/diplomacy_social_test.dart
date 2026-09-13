@@ -79,72 +79,6 @@ void main() {
   );
 
   test(
-    'human consent ignores opinion while AI alliance threshold is enforced',
-    () {
-      final e = engine();
-      e.changeOpinion(1, 0, -80, 'Сынақ');
-      expect(e.canFormMilitaryAlliance(1, 0), isTrue);
-      expect(
-        e.proposeDiplomacy(0, 1, DiplomacyProposalType.militaryAlliance),
-        isTrue,
-      );
-      expect(
-        e.resolveDiplomacyProposal(e.proposalsFor(1).single, accept: true),
-        isTrue,
-      );
-      expect(e.diplomacyBetween(0, 1), DiplomacyStatus.coalition);
-    },
-  );
-
-  test(
-    'AI checks alliance opinions regardless of which arrow carries alliance',
-    () {
-      for (final direction in [false, true]) {
-        final e = engine(humans: 1);
-        expect(
-          e.proposeExchange(
-            from: 0,
-            to: 1,
-            terms: [
-              DiplomacyTerm(
-                fromSender: direction,
-                offer: const DiplomacyOffer(
-                  type: DiplomacyExchangeType.militaryAlliance,
-                ),
-              ),
-            ],
-          ),
-          isFalse,
-        );
-        e.state.turn = 1;
-        GameAi(mod: mod, engine: e).takeTurn();
-        expect(e.diplomacyBetween(0, 1), isNot(DiplomacyStatus.coalition));
-        e.changeOpinion(1, 0, 50, 'Сенім');
-        expect(
-          e.proposeExchange(
-            from: 0,
-            to: 1,
-            terms: [
-              DiplomacyTerm(
-                fromSender: direction,
-                offer: const DiplomacyOffer(
-                  type: DiplomacyExchangeType.militaryAlliance,
-                ),
-              ),
-            ],
-          ),
-          isTrue,
-        );
-        e.state.turn = 1;
-        GameAi(mod: mod, engine: e).takeTurn();
-        // Trust allows negotiation, but an isolated pact has no strategic
-        // value: the bot must not accept merely because its score is high.
-        expect(e.diplomacyBetween(0, 1), isNot(DiplomacyStatus.coalition));
-      }
-    },
-  );
-
-  test(
     'war friendship betrayal and black marks affect opinions with reasons',
     () {
       final e = engine();
@@ -154,12 +88,6 @@ void main() {
       expect(e.opinionOf(1, 0), -10);
       e.declareWar(0, 1);
       expect(e.opinionOf(1, 0), -55);
-      final military = engine();
-      expect(military.formMilitaryAlliance(0, 1), isTrue);
-      expect(military.worsenDiplomacy(0, 1), isTrue);
-      // Downgrading an existing coalition is not a new friendship reward.
-      expect(military.opinionOf(0, 1), -15);
-      expect(military.opinionOf(1, 0), -15);
       expect(
         e.state.diplomacyMessages.any(
           (m) => m.to == 1 && m.text.contains('соғыс'),
@@ -346,15 +274,15 @@ void main() {
     expect(jsonEncode(e.state.toJson()), before);
   });
 
-  test('war condition cannot bypass a third bloc member truce', () {
+  test('war condition never enrolls a third country with its own truce', () {
     final e = engine();
-    e.formMilitaryAlliance(0, 1);
+    expect(e.formMilitaryAlliance(0, 1), isFalse);
     e.state.diplomacyWarCooldowns[1][2] = 8;
     e.state.diplomacyWarCooldowns[2][1] = 8;
     expect(
       e.proposeExchange(
         from: 0,
-        to: 2,
+        to: 1,
         terms: const [
           DiplomacyTerm(
             fromSender: true,
@@ -365,8 +293,15 @@ void main() {
           ),
         ],
       ),
-      isFalse,
+      isTrue,
     );
+    expect(
+      e.resolveDiplomacyProposal(e.proposalsFor(1).single, accept: true),
+      isTrue,
+    );
+    expect(e.areEnemies(0, 2), isTrue);
+    expect(e.areEnemies(1, 2), isFalse);
+    expect(e.diplomacyCooldown(1, 2), 8);
   });
 
   test('stale friendship cannot turn into an unintended ceasefire', () {

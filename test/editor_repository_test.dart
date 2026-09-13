@@ -276,7 +276,7 @@ void main() {
     );
 
     expect(restored, isNotNull);
-    expect(restored!.toJson()['schema'], 12);
+    expect(restored!.toJson()['schema'], 13);
     expect(restored.nextPeaceConferenceId, 4);
     expect(restored.peaceConferences, hasLength(1));
     final conference = restored.peaceConferences.single;
